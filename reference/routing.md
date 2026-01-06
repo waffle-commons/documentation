@@ -1,6 +1,6 @@
-# Routing Reference
+# Routing Reference (`waffle-commons/routing`)
 
-The Routing component (`waffle-commons/routing`) maps HTTP requests to Controllers using PHP Attributes.
+The Routing component maps HTTP requests to Controllers using PHP Attributes.
 
 ## `#[Route]` Attribute
 

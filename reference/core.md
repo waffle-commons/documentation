@@ -1,23 +1,51 @@
 # Core Reference (`waffle-commons/waffle`)
 
-The Core component provides the kernel and bootstrapping logic.
+The Core component acts as the nervous system of the Waffle framework. It bootstraps the application, handles the request/response lifecycle, and integrates the primary components (Container, Config, Security, Pipeline).
 
-## `Waffle\Kernel`
+## The Kernel
 
-The `Kernel` is the entry point of the application. It extends `AbstractKernel` and implements `KernelInterface`.
+The `Waffle\Kernel` (extending `Waffle\Abstract\AbstractKernel`) is the entry point of the application.
 
-### `boot(): self`
-Initializes the System, loads the environment (via DotEnv if not already loaded), and prepares the Container.
+### Lifecycle
 
-### `handle(ServerRequestInterface $request): ResponseInterface`
-The main execution loop.
-1.  Calls `boot()` and `configure()`.
-2.  Checks strictly for the presence of MiddlewareStack, Container, and System.
-3.  Creates a fallback `ControllerDispatcher`.
-4.  Dispatches the request through the Middleware Stack.
+The Kernel follows a strict lifecycle:
 
-## `Waffle\Handler\ControllerDispatcher`
+1.  **Boot**: Initializes environmental variables.
+2.  **Configure**: Loads configuration, sets up the Container, and initializes the System.
+3.  **Handle**: Processes the incoming `ServerRequestInterface` and returns a `ResponseInterface`.
 
-This is the final handler in the chain. It uses the `Router` to match the request and executes the corresponding Controller method.
-- It resolves Controller arguments using the Container (Autowiring).
-- It executes the method and ensures a valid `ResponseInterface` is returned.
+### Key Methods
+
+#### `handle(ServerRequestInterface $request): ResponseInterface`
+
+This is the main entry point for handling HTTP requests. It ensures the kernel is booted and configured before passing the request to the Middleware Stack.
+
+```php
+use Waffle\Commons\Runtime\WaffleRuntime;
+
+// The Runtime calls handle() internally
+$runtime->run($kernel, $request, $emitter);
+```
+
+#### `boot(): self`
+
+Initializes the environment (e.g., loading `.env` variables if not present).
+
+#### `configure(): self`
+
+Sets up the application state. It:
+- Validates that Config and Security are injected.
+- Initializes the Service and Controller factories within the Container.
+- Boots the core System.
+
+## Dependency Injection
+
+The Kernel relies on Setter Injection for its core dependencies, allowing for flexibility in how the application is assembled (e.g., by a Factory).
+
+```php
+// From App\Factory\AppKernelFactory
+$kernel->setConfiguration($config);
+$kernel->setSecurity($security);
+$kernel->setContainerImplementation($secureContainer);
+$kernel->setMiddlewareStack($stack);
+```

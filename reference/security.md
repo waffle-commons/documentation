@@ -1,6 +1,6 @@
-# Security Reference
+# Security Reference (`waffle-commons/security`)
 
-The Security component (`waffle-commons/security`) enforces Attribute-Based Access Control (ABAC) via the Container.
+The Security component enforces Attribute-Based Access Control (ABAC) via the Container.
 
 ## `SecureContainer`
 

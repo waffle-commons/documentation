@@ -1,54 +1,76 @@
-# How to Configure Routing
+# How-To: Routing
 
-Waffle uses PHP Attributes to define routes directly next to your code.
+Waffle uses PHP 8 Attributes to define routes directly in your controller classes. This keeps your routing logic close to your application code.
 
 ## Defining a Route
 
-Add the `#[Route]` attribute to any public method in your Controller.
+Use the `#[Route]` attribute from `Waffle\Commons\Routing\Attribute` to map a URL path to a controller method.
 
 ```php
-use Waffle\Commons\Routing\Attribute\Route;
+namespace App\Controller;
 
-#[Route(path: '/user', name: 'user_list')]
-public function list(): ResponseInterface
+use Waffle\Commons\Routing\Attribute\Route;
+use Waffle\Core\BaseController;
+
+final class BlogController extends BaseController
 {
-    // ...
+    #[Route(path: '/blog', name: 'blog_list')]
+    public function list(): ResponseInterface
+    {
+        // ...
+    }
 }
 ```
 
-## Using Parameters
+## Route Parameters
 
-Dynamic parts of the URL are defined with curly braces `{}`.
+You can define dynamic route parameters using curly braces `{param}`. These parameters are passed to your controller method arguments.
 
-### Basic Parameter
+### Basic Usage
+
 ```php
-#[Route(path: '/user/{id}', name: 'user_show')]
+#[Route(path: '/blog/{id}', name: 'blog_show')]
 public function show(string $id): ResponseInterface
 {
-    // $id matches the URL segment
+    // $id contains the value from the URL
 }
 ```
 
-### Multiple Parameters
-The order of arguments in the method does not matter; names must match.
+### Strict Typing & Validation
+
+To enforce strict typing and validation, you can use the `Argument` attribute within the `Route` definition. This ensures the router validates the parameter before invoking your controller.
 
 ```php
-#[Route(path: '/blog/{category}/{slug}', name: 'blog_post')]
-public function post(string $slug, string $category): ResponseInterface
+use Waffle\Commons\Routing\Attribute\Argument;
+
+#[Route(
+    path: '/blog/{id}', 
+    name: 'blog_show',
+    arguments: [
+        new Argument(classType: 'int', paramName: 'id', required: true)
+    ]
+)]
+public function show(int $id): ResponseInterface
 {
-    // ...
+    // $id is guaranteed to be an integer
+    return $this->jsonResponse(data: ['id' => $id]);
 }
 ```
 
-## Restricting HTTP Methods (Planned)
+## Route Prefixes
 
-*Note: In v0.1.0-alpha4, the `#[Route]` attribute does not yet strictly enforce HTTP methods at the routing level. You should check the request method inside your controller if necessary.*
+You can also apply the `#[Route]` attribute to the **Class** itself to define a prefix for all methods within that controller.
 
 ```php
-public function update(ServerRequestInterface $request): ResponseInterface
+#[Route(path: '/api/v1', name: 'api_')]
+final class ApiController extends BaseController
 {
-    if ($request->getMethod() !== 'POST') {
-        // Return 405 Method Not Allowed
+    // Matches /api/v1/users
+    // Route name: api_users
+    #[Route(path: '/users', name: 'users')]
+    public function users(): ResponseInterface
+    {
+        // ...
     }
 }
 ```

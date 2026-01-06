@@ -1,32 +1,58 @@
-# How to Handle Errors
+# How-To: Error Handling
 
-Waffle automates error rendering using the RFC 7807 standard. However, you can control what users see by throwing specific exceptions.
+Waffle provides a robust error handling system out of the box using the `ErrorHandlerMiddleware`.
 
-## Throwing Exceptions
+## Automatic Handling
 
-To trigger an error response, simply throw an exception from your Controller or Service.
+The `Waffle\Commons\ErrorHandler\Middleware\ErrorHandlerMiddleware` is automatically prepended to the middleware stack in `AppKernelFactory`. It catches **all** exceptions thrown during the request lifecycle and converts them into a formatted HTTP response using the `JsonErrorRenderer`.
+
+## usage
+
+To trigger an error response, simply throw an exception from your Controller or Middleware.
+
+### Standard Exceptions
+
+Throwing a generic `\RuntimeException` or `\Exception` will result in a **500 Internal Server Error**.
 
 ```php
-use Waffle\Commons\Routing\Exception\RouteNotFoundException;
-
-public function show(string $id): ResponseInterface
+public function index(): ResponseInterface
 {
-    $user = $this->repository->find($id);
-
-    if (!$user) {
-        // Returns a 404 response
-        throw new RouteNotFoundException("User $id not found."); 
-    }
-    
-    // ...
+    throw new \RuntimeException("Something went wrong!");
 }
 ```
 
-## Customizing the Status Code (Planned)
+**Response:**
+```json
+{
+    "error": "Internal Server Error",
+    "message": "Something went wrong!",
+    "code": 500
+}
+```
 
-Currently, the `JsonErrorRenderer` maps exceptions to status codes internally:
-- `RouteNotFoundExceptionInterface` -> **404**
-- `InvalidArgumentException` -> **400**
-- All others -> **500**
+### Waffle Exceptions
 
-*Support for mapping custom exception classes to specific status codes (e.g., `MyCustomException` -> 402) is planned for the next release.*
+You can throw specific Waffle exceptions to trigger different HTTP status codes.
+
+#### `Waffle\Exception\WaffleException`
+
+This is the base class for framework exceptions.
+
+#### `Waffle\Commons\Security\Exception\SecurityException`
+
+Throwing this exception will result in a **500 Error** (or potentially 403/401 depending on future renderer logic, currently defaults to 500 in the codebase).
+
+```php
+use Waffle\Commons\Security\Exception\SecurityException;
+
+public function secret(): ResponseInterface
+{
+    throw new SecurityException("Access Denied");
+}
+```
+
+## Customizing the Renderer
+
+The default `JsonErrorRenderer` respects the `app.debug` configuration.
+- **Debug=true**: Shows full stack traces.
+- **Debug=false**: Shows generic error messages for security.

@@ -1,49 +1,72 @@
-# How to Create Custom Middleware
+# How-To: Middleware
 
-Middleware allows you to interpret or modify requests before they reach your controller, and responses before they are sent to the client.
+Middleware allows you to inspect and filter HTTP requests entering your application and responses leaving it. Waffle uses PSR-15 standard middleware.
 
-## 1. Implement `MiddlewareInterface`
+## Creating a Middleware
 
-Create a new class implementing the standard PSR-15 interface.
+To create a middleware, implement the `Psr\Http\Server\MiddlewareInterface`.
+
+### Example: Logging Middleware
+
+Create `src/Middleware/LogMiddleware.php`:
 
 ```php
+<?php
+
+declare(strict_types=1);
+
 namespace App\Middleware;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Psr\Log\LoggerInterface;
 
-class LoggerMiddleware implements MiddlewareInterface
+class LogMiddleware implements MiddlewareInterface
 {
+    public function __construct(
+        private LoggerInterface $logger
+    ) {}
+
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        // Logic BEFORE Controller
-        $path = $request->getUri()->getPath();
-        error_log("Incoming Request: $path");
+        // 1. Logic before the controller
+        $this->logger->info('Request received: ' . $request->getUri()->getPath());
 
-        // Delegate to the next middleware/controller
+        // 2. Delegate to the next middleware/controller
         $response = $handler->handle($request);
 
-        // Logic AFTER Controller
-        error_log("Response Status: " . $response->getStatusCode());
+        // 3. Logic after the controller
+        $this->logger->info('Response generated: ' . $response->getStatusCode());
 
         return $response;
     }
 }
 ```
 
-## 2. Register Global Middleware
+## Registering Middleware
 
-To make your middleware run on every request, you need to add it to the stack. Open `public/index.php` (or your bootstrapping logic).
+Middleware is registered in your `App\Factory\AppKernelFactory`. This is where the application pipeline is assembled.
+
+Open `src/Factory/AppKernelFactory.php` and locate the `create` method:
 
 ```php
-use App\Middleware\LoggerMiddleware;
+// src/Factory/AppKernelFactory.php
 
-// ... Kernel Initialization
+use App\Middleware\LogMiddleware;
+use Psr\Log\NullLogger; // Or your concrete Logger
 
-/** @var \Waffle\Kernel $kernel */
-$kernel->getMiddlewareStack()->add(new LoggerMiddleware());
+// ... inside create() method ...
+
+// 5. Instantiate the Pipeline Middleware
+$stack = new MiddlewareStack();
+
+// ... existing error handler ...
+
+// Register your custom middleware
+$stack->add(new LogMiddleware(new NullLogger()));
 ```
 
-Using `add()` puts it at the **end** of the stack (executed last). Use `prepend()` to run it **first**.
+> [!TIP]
+> Use `$stack->prepend($middleware)` if you need your middleware to run *before* others (e.g., for early security checks or error handling).

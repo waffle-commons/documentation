@@ -20,8 +20,3 @@ The container inspects the constructor:
     - If a default value exists, it uses it.
     - If it is nullable, it passes `null`.
     - Otherwise, throws `ContainerException`.
-
-## `ServiceWithDefaultParam`
-This is an internal tested concept ensuring that:
-`public function __construct(int $port = 80)`
-resolves successfully without configuration (injects `80`).
