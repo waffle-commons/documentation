@@ -1,51 +1,66 @@
 # Core Reference (`waffle-commons/waffle`)
 
-The Core component acts as the nervous system of the Waffle framework. It bootstraps the application, handles the request/response lifecycle, and integrates the primary components (Container, Config, Security, Pipeline).
+The Core component acts as the nervous system of the Waffle framework. It bootstraps the application, handles the request/response lifecycle, and integrates the primary components (Container, Config, Security, Pipeline, and Event Dispatcher).
 
 ## The Kernel
 
-The `Waffle\Kernel` (extending `Waffle\Abstract\AbstractKernel`) is the entry point of the application.
+The `Waffle\Kernel` (extending `Waffle\Abstract\AbstractKernel`) is the entry point of the application. It uses PHP 8.5 **Asymmetric Visibility** for internal state management:
 
-### Lifecycle
+```php
+abstract class AbstractKernel implements KernelInterface
+{
+    protected(set) ?System $system = null;
+    protected(set) ?MiddlewareStackInterface $middlewareStack = null;
+    // ...
+}
+```
 
-The Kernel follows a strict lifecycle:
+### Lifecycle & Events
+
+The Kernel follows a strict lifecycle, dispatching PSR-14 events at key stages:
 
 1.  **Boot**: Initializes environmental variables.
 2.  **Configure**: Loads configuration, sets up the Container, and initializes the System.
-3.  **Handle**: Processes the incoming `ServerRequestInterface` and returns a `ResponseInterface`.
+3.  **Handle**: Processes the incoming `ServerRequestInterface`.
+    - **Event**: `Waffle\Event\RequestReceivedEvent` is dispatched before the pipeline.
+    - **Processing**: Request passes through the `MiddlewareStack`.
+    - **Event**: `Waffle\Event\ResponseGeneratedEvent` is dispatched after the pipeline.
+4.  **Terminate**: Dispatched after the response is emitted to the client.
+    - **Event**: `Waffle\Event\TerminateEvent` for heavy asynchronous tasks.
 
 ### Key Methods
 
 #### `handle(ServerRequestInterface $request): ResponseInterface`
 
-This is the main entry point for handling HTTP requests. It ensures the kernel is booted and configured before passing the request to the Middleware Stack.
+This is the main entry point for handling HTTP requests. It ensures the kernel is booted and configured before passing the request to the Middleware Stack. It dispatches lifecycle events to allow hooks into the request processing.
 
 ```php
-use Waffle\Commons\Runtime\WaffleRuntime;
-
-// The Runtime calls handle() internally
-$runtime->run($kernel, $request, $emitter);
+public function handle(ServerRequestInterface $request): ResponseInterface
+{
+    // ...
+    $this->dispatch(new RequestReceivedEvent($request));
+    // ... pipeline execution ...
+    $this->dispatch(new ResponseGeneratedEvent($response));
+    return $response;
+}
 ```
 
-#### `boot(): self`
+#### `boot(): static`
 
-Initializes the environment (e.g., loading `.env` variables if not present).
+Initializes the environment and sets up the base state.
 
-#### `configure(): self`
+#### `configure(): void`
 
-Sets up the application state. It:
-- Validates that Config and Security are injected.
-- Initializes the Service and Controller factories within the Container.
-- Boots the core System.
+Sets up the application state, initializes the Container with services and controllers, and boots the `System`.
 
 ## Dependency Injection
 
-The Kernel relies on Setter Injection for its core dependencies, allowing for flexibility in how the application is assembled (e.g., by a Factory).
+The Kernel relies on Setter Injection for its core dependencies, allowing for flexibility:
 
 ```php
-// From App\Factory\AppKernelFactory
 $kernel->setConfiguration($config);
 $kernel->setSecurity($security);
 $kernel->setContainerImplementation($secureContainer);
 $kernel->setMiddlewareStack($stack);
+$kernel->setEventDispatcher($dispatcher); // New in Alpha 5
 ```

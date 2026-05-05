@@ -16,8 +16,18 @@ Unlike monolithic frameworks, Waffle is composed of standalone libraries that ca
 - `waffle-commons/routing`: Attribute-based Router.
 - `waffle-commons/security`: ABAC Security System.
 - `waffle-commons/container`: PSR-11 Dependency Injection.
+- `waffle-commons/event-dispatcher`: PSR-14 Event System.
+- `waffle-commons/log`: PSR-3 JSON Stream Logger.
 - `waffle-commons/http`: PSR-7/17 implementation.
 - `waffle-commons/config`: YAML & DotEnv loader.
 - `waffle-commons/error-handler`: RFC 7807 Error Renderer.
 
-This structure allows you to compose your application with exactly what you need.
+## Event-Driven Core
+
+Starting with Alpha 5, the Waffle Kernel is **event-driven**. It leverages PSR-14 to provide hooks throughout the request/response lifecycle:
+
+- **Request Injection**: Modify the request before it enters the middleware pipeline.
+- **Response Decoration**: Standardize or mutate responses after processing.
+- **Post-Emission Tasks**: The `TerminateEvent` allows for heavy asynchronous processing (e.g., sending emails, cache warming) after the response has been sent to the client, maximizing performance in worker modes (FrankenPHP/RoadRunner).
+
+This structure ensures maximum extensibility without modifying the core framework logic.

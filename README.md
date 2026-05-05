@@ -41,4 +41,4 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ---
 
-*Verified for Waffle Framework v0.1.0-alpha4 running on PHP 8.5.*
+*Verified for Waffle Framework v0.1.0-alpha5 running on PHP 8.5.*
