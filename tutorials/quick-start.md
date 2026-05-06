@@ -71,23 +71,43 @@ curl https://localhost/hello/Waffle
 }
 ```
 
-## 4. Understanding the Entry Point
+## 4. Bootstrapping the Kernel
 
-The application boots via `public/index.php`. It leverages the `WaffleRuntime` to orchestrate the Kernel, Request, and Emitter.
+The Kernel is the heart of your application. In Alpha 5, it requires an **Event Dispatcher** and a **Logger** to be fully functional.
+
+These are typically configured in your Kernel Factory (`src/Factory/AppKernelFactory.php`):
 
 ```php
-// public/index.php (Simplified)
+use Waffle\Commons\Log\StreamLogger;
+use Waffle\Commons\EventDispatcher\Dispatcher\EventDispatcher;
+use Waffle\Commons\EventDispatcher\Provider\ListenerProvider;
+
+$logger = new StreamLogger(streamPath: 'php://stderr');
+$dispatcher = new EventDispatcher(new ListenerProvider());
+
+$kernel = new AppKernel();
+$kernel->setLogger($logger);
+$kernel->setEventDispatcher($dispatcher);
+$kernel->setConfiguration($config);
+$kernel->setSecurity($security);
+
+$kernel->boot()->configure();
+```
+
+## 5. Understanding the Entry Point
+
+The application entry point `public/index.php` leverages `WaffleRuntime` to orchestrate the lifecycle.
+
+```php
+// public/index.php
 use Waffle\Commons\Runtime\WaffleRuntime;
 use App\Factory\AppKernelFactory;
 
-// ... autoload & env loading ...
-
 $kernel = AppKernelFactory::create($env, $debug);
 $request = AppKernelFactory::createRequest();
-$emitter = AppKernelFactory::createEmitter();
 
 $runtime = new WaffleRuntime();
-$runtime->run($kernel, $request, $emitter);
+$runtime->run($kernel, $request);
 ```
 
-Congratulations! You have successfully built your first Waffle application.
+Congratulations! You have successfully built and configured your first Waffle application with full logging and event support.

@@ -9,6 +9,8 @@ Below is the index of all components available in the `waffle-commons` ecosystem
 | [**Routing**](routing.md) | `waffle-commons/routing`: Attribute router. |
 | [**Security**](security.md) | `waffle-commons/security`: ABAC System. |
 | [**Pipeline**](pipeline.md) | `waffle-commons/pipeline`: PSR-15 Middleware Stack. |
+| [**Event Dispatcher**](../how-to/events.md) | `waffle-commons/event-dispatcher`: PSR-14 Event System. |
+| [**Log**](contracts.md#logging-psr-3) | `waffle-commons/log`: PSR-3 JSON Stream Logger. |
 | [**Container**](container.md) | `waffle-commons/container`: PSR-11 Container with Autowiring. |
 | [**HTTP**](http.md) | `waffle-commons/http`: PSR-7/17 implementation. |
 | [**Config**](config.md) | `waffle-commons/config`: YAML Configuration loader. |

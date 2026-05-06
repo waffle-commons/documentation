@@ -1,10 +1,10 @@
 # How to Secure Your Application
 
-Waffle implements a global **Attribute-Based Access Control (ABAC)** system integrated into the Container.
+Waffle implements a global **Attribute-Based Access Control (ABAC)** system integrated into both the Container and the HTTP Pipeline.
 
-## Configuring the Security Level
+## Configuring the Global Security Level
 
-The security level defines the rigorousness of checks performed on every object instantiated by the application. You can configure this in your `config/app.yaml`.
+The security level defines the base rigorousness of checks performed on every object instantiated by the application. Configure this in `config/app.yaml`:
 
 ```yaml
 waffle:
@@ -13,24 +13,56 @@ waffle:
     level: 5
 ```
 
-### What do the levels do?
-Each level adds a stronger rule to the validation chain.
-- **Level 1**: Ensures objects are instances of their own class (Basic Integrity).
-- **Levels 2-10**: Perform increasingly strict checks on object state and properties.
+## Securing Controllers with Middleware
 
-## Using the Secure Container
+The `SecurityMiddleware` automatically protects your routes by analyzing the target controller and method before execution. 
 
-You don't need to do anything special to use the Secure Container; it is automatically wrapped around the core container during the System boot.
+To enable it, ensure it's added to your Kernel's middleware stack. It will:
+1. Identify the target Controller and Method.
+2. Read any `#[Voter]` attributes.
+3. Deny access (403) if any voter rejects the request.
 
-Any service you inject into your controller has already passed the security checks.
+## Using Granular Security Attributes
+
+You can apply specific security requirements using the `#[Voter]` attribute on a controller class or a specific method.
+
+```php
+use Waffle\Commons\Contracts\Security\Attribute\Voter;
+use App\Security\Voter\IsAdminVoter;
+
+#[Voter(name: IsAdminVoter::class)]
+class AdminController
+{
+    public function deleteAction() { ... }
+}
+```
+
+### Creating a Custom Voter
+
+A Voter must implement `Waffle\Commons\Contracts\Security\VoterInterface`:
+
+```php
+namespace App\Security\Voter;
+
+use Waffle\Commons\Contracts\Security\VoterInterface;
+
+class IsAdminVoter implements VoterInterface
+{
+    public function decide(): bool
+    {
+        // Your logic here (e.g. check session, roles, etc.)
+        return true; 
+    }
+}
+```
+
+## Automated Security Analysis
+
+The `SecureContainer` ensures that even if a service is retrieved manually from the container, it passes the security audit:
 
 ```php
 public function __construct(private UserService $service)
 {
-    // If we are here, $service has been analyzed and approved by the Security component.
+    // If we are here, $service has been analyzed and approved.
 }
 ```
-
-## Granular Control (Planned)
-
-*Support for applying specific security rules via attributes on individual Controllers (e.g., `#[Rule]`) is planned for a future release.*

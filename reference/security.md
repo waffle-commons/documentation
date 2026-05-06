@@ -1,20 +1,41 @@
 # Security Reference (`waffle-commons/security`)
 
-The Security component enforces Attribute-Based Access Control (ABAC) via the Container.
+The Security component enforces Attribute-Based Access Control (ABAC) via the Container and HTTP Middleware.
+
+## `SecurityMiddleware`
+
+The `SecurityMiddleware` is a PSR-15 middleware that intercepts incoming requests to perform security audits before the controller is executed.
+
+- It extracts the controller and method from the request attributes.
+- It triggers the `SecureContainer::analyze()` method.
+- It logs access denials via PSR-3 for auditing.
 
 ## `SecureContainer`
 
 The `SecureContainer` is a decorator that wraps the inner PSR-11 container.
-- It intercepts every `get()` call.
-- It passes the resolved object to the Security Analyzer.
-- If validation fails, it throws a `SecurityException`.
+- It intercepts every `get()` call to perform security analysis on resolved objects.
+- It provides an `analyze(string $controller, string $method)` method for on-demand auditing (used by the Middleware).
 
-## Security Rules (Levels)
+## Security Attributes
 
-Security is configured via an integer level (1-10) in `app.yaml`.
+### `Waffle\Commons\Contracts\Security\Attribute\Voter`
 
-- **Level 1 (`Level1Rule`)**: Consistency Check. Ensures the object is an instance of its own class.
-- **Level 2 - 9**: Intermediate validation rules (e.g., Code Integrity, Property Type safety).
-- **Level 10 (`Level10Rule`)**: Paranoid Check. Maximum strictness used for High Security environments.
+Used to declare security requirements on classes or methods.
 
-> **Note**: Specific `#[Rule]` attributes for granular control are planned for future releases.
+```php
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
+final readonly class Voter
+{
+    public function __construct(public string $name) {}
+}
+```
+
+The `name` must be the FQCN of a class implementing `Waffle\Commons\Contracts\Security\VoterInterface`.
+
+## Security Rules (Hierarchy Levels)
+
+Waffle enforces a base security level configured in `app.yaml`.
+
+- **Level 1 (`Level1Rule`)**: Consistency Check.
+- **Level 2 - 9**: Intermediate validation rules (Code Integrity, Property Type safety).
+- **Level 10 (`Level10Rule`)**: Paranoid Check. Maximum strictness.
