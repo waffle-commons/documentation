@@ -1,66 +1,105 @@
 # Core Reference (`waffle-commons/waffle`)
 
-The Core component acts as the nervous system of the Waffle framework. It bootstraps the application, handles the request/response lifecycle, and integrates the primary components (Container, Config, Security, Pipeline, and Event Dispatcher).
+> **Release:** `v0.1.0-beta0`
+
+The framework kernel. Orchestrates the PSR-15 middleware stack, dispatches lifecycle events, and resolves controllers via the container. The kernel itself stays agnostic of routing, security, logging, and HTTP — every concrete dependency is injected.
 
 ## The Kernel
 
-The `Waffle\Kernel` (extending `Waffle\Abstract\AbstractKernel`) is the entry point of the application. It uses PHP 8.5 **Asymmetric Visibility** for internal state management:
+`Waffle\Kernel` extends `Waffle\Abstract\AbstractKernel`, which implements `Waffle\Commons\Contracts\Core\KernelInterface`.
 
 ```php
+namespace Waffle\Abstract;
+
 abstract class AbstractKernel implements KernelInterface
 {
-    protected(set) ?System $system = null;
+    use ReflectionTrait;
+
+    protected string $environment = Constant::ENV_PROD;
+    protected bool $booted = false;
+
+    public ?ConfigInterface $config = null;
+    public ?ContainerInterface $container = null;
+    protected ?SecurityInterface $security = null;
+    protected ?EventDispatcherInterface $dispatcher = null;
+
+    protected(set) ?System $system = null;                          // asymmetric visibility
     protected(set) ?MiddlewareStackInterface $middlewareStack = null;
-    // ...
+
+    public function __construct(protected LoggerInterface $logger = new NullLogger());
 }
 ```
 
-### Lifecycle & Events
+## Setter API
 
-The Kernel follows a strict lifecycle, dispatching PSR-14 events at key stages:
-
-1.  **Boot**: Initializes environmental variables.
-2.  **Configure**: Loads configuration, sets up the Container, and initializes the System.
-3.  **Handle**: Processes the incoming `ServerRequestInterface`.
-    - **Event**: `Waffle\Event\RequestReceivedEvent` is dispatched before the pipeline.
-    - **Processing**: Request passes through the `MiddlewareStack`.
-    - **Event**: `Waffle\Event\ResponseGeneratedEvent` is dispatched after the pipeline.
-4.  **Terminate**: Dispatched after the response is emitted to the client.
-    - **Event**: `Waffle\Event\TerminateEvent` for heavy asynchronous tasks.
-
-### Key Methods
-
-#### `handle(ServerRequestInterface $request): ResponseInterface`
-
-This is the main entry point for handling HTTP requests. It ensures the kernel is booted and configured before passing the request to the Middleware Stack. It dispatches lifecycle events to allow hooks into the request processing.
+The kernel uses **setter injection** for its dependencies. Verbatim from `AbstractKernel`:
 
 ```php
-public function handle(ServerRequestInterface $request): ResponseInterface
-{
-    // ...
-    $this->dispatch(new RequestReceivedEvent($request));
-    // ... pipeline execution ...
-    $this->dispatch(new ResponseGeneratedEvent($response));
-    return $response;
-}
+public function setContainerImplementation(PsrContainerInterface $container): void;
+public function setConfiguration(ConfigInterface $config): void;
+public function setSecurity(SecurityInterface $security): void;
+public function setMiddlewareStack(MiddlewareStackInterface $stack): void;
+public function setEventDispatcher(EventDispatcherInterface $dispatcher): void;
 ```
 
-#### `boot(): static`
+The PSR-3 logger is passed via the constructor and stored as `protected LoggerInterface $logger`; default is `NullLogger`.
 
-Initializes the environment and sets up the base state.
+## Lifecycle
 
-#### `configure(): void`
+### `boot(): static`
 
-Sets up the application state, initializes the Container with services and controllers, and boots the `System`.
+Initializes the environment (`APP_ENV`, environment string) and flips the `$booted` guard. Idempotent — calling it twice is a no-op.
 
-## Dependency Injection
+### `configure(): void`
 
-The Kernel relies on Setter Injection for its core dependencies, allowing for flexibility:
+Runs once after `boot()`. Validates that `ConfigInterface`, `SecurityInterface`, and a PSR-11 container were injected. Builds the `System` binding. Optionally calls `$container->lock()` if available.
 
-```php
-$kernel->setConfiguration($config);
-$kernel->setSecurity($security);
-$kernel->setContainerImplementation($secureContainer);
-$kernel->setMiddlewareStack($stack);
-$kernel->setEventDispatcher($dispatcher); // New in Alpha 5
-```
+### `handle(ServerRequestInterface): ResponseInterface`
+
+The request hot-path:
+
+1. Calls `boot()->configure()` lazily if not yet booted.
+2. `validateState()` — raises if the middleware stack / container / system isn't set up.
+3. Dispatches `RequestReceivedEvent`. Listeners may swap the request via the returned event instance.
+4. Builds a terminal `ControllerDispatcher` and runs the middleware stack against it.
+5. Dispatches `ResponseGeneratedEvent`. Listeners may swap the response.
+6. Returns the response.
+
+### `terminate(ServerRequestInterface, ResponseInterface): void`
+
+Called by `WaffleRuntime` after the response has been emitted. Dispatches `TerminateEvent` for post-response async work (audit logging, fire-and-forget tasks).
+
+### `reset(): void`
+
+Called between FrankenPHP worker requests. Currently calls `$container->reset()`.
+
+## Lifecycle events
+
+All three live in `Waffle\Event\*`:
+
+| Event | When | Stoppable | Mutators |
+| :--- | :--- | :--- | :--- |
+| `RequestReceivedEvent` | Before the middleware pipeline runs. | No | `getRequest()`, `setRequest()` |
+| `ResponseGeneratedEvent` | After the pipeline returns. | No | `getResponse()`, `setResponse()` |
+| `TerminateEvent` | After the response is emitted. | No | `getRequest()`, `getResponse()` |
+
+## Controller plumbing
+
+| Class | Role |
+| :--- | :--- |
+| `Waffle\Handler\ControllerDispatcher` | Terminal PSR-15 handler. Resolves `_controller` + `_method` + `_route_params` from the request attributes and invokes the controller method. |
+| `Waffle\Handler\ControllerArgumentResolver` | Hydrates the controller method's arguments. Detects `#[Dto]` on a parameter's type and instantiates it from the parsed body (validation happens inside the DTO's Property Hooks). |
+| `Waffle\Handler\ControllerResponseConverter` | Converts a controller's scalar / array return into a PSR-7 `ResponseInterface`. |
+| `Waffle\Core\BaseController` | Default `BaseControllerInterface` implementation; provides `jsonResponse()` and similar helpers. |
+| `Waffle\Abstract\AbstractController` | Abstract base that user controllers may extend. |
+
+## Exceptions
+
+All inherit from `Waffle\Exception\WaffleException`:
+
+- `RouteNotFoundException` — implements `RouteNotFoundExceptionInterface`. Rendered as RFC 7807 `404`.
+- `ValidationException` — implements `ValidationExceptionInterface`. Rendered as RFC 7807 `422`, with the optional `getField()` surfaced into the payload.
+- `RenderingException` — generic rendering failures.
+- `InvalidConfigurationException` — kernel raised this when required setters are missing.
+
+The `ErrorHandlerMiddleware` translates each via interface-matching, so application exceptions opt into the right HTTP status by implementing the corresponding contract interface.

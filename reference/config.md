@@ -1,73 +1,77 @@
 # Config Reference (`waffle-commons/config`)
 
-The Config component handles loading application configuration from YAML files and environment variables.
+> **Release:** `v0.1.0-beta0`
+> **Requires:** `ext-yaml` (the native PECL YAML extension)
 
-## Usage
+Loads application configuration from YAML files using the native `ext-yaml` extension with `yaml.decode_php = 0` (no PHP-deserialisation gadgets). Environment overlays merge via `array_replace_recursive`; `%env(VAR_NAME)%` placeholders resolve at load time.
 
-The `Waffle\Commons\Config\Config` class is responsible for loading `app.yaml` and environment-specific overrides (e.g., `app_prod.yaml`).
-
-### Loading Configuration
-
-```php
-use Waffle\Commons\Config\Config;
-
-$config = new Config(
-    configDir: __DIR__ . '/../config',
-    environment: 'prod'
-);
-```
-
-### Retrieving Values
-
-The `Config` class provides strictly typed methods to retrieve configuration values.
-
-#### `getInt(string $key, ?int $default = null): ?int`
-
-Retrieves an integer value. Throws `InvalidConfigurationException` if the value exists but is not an integer.
+## Constructor — exact signature
 
 ```php
-$level = $config->getInt('waffle.security.level', 1);
+namespace Waffle\Commons\Config;
+
+use Waffle\Commons\Contracts\Config\ConfigInterface;
+use Waffle\Commons\Contracts\Enum\Failsafe;
+
+final class Config implements ConfigInterface
+{
+    public function __construct(
+        string $configDir,
+        string $environment,
+        Failsafe $failsafe = Failsafe::DISABLED,
+    );
+}
 ```
 
-#### `getString(string $key, ?string $default = null): ?string`
+## Typed getters (PSR-style)
 
-Retrieves a string value.
+All four getters share the same shape: `(string $key, ?T $default = null): ?T`. Mismatched types throw `InvalidConfigurationException` (which implements `InvalidConfigurationExceptionInterface`).
 
 ```php
-$path = $config->getString('waffle.paths.controllers');
+public function getInt(string $key, ?int $default = null): ?int;
+public function getString(string $key, ?string $default = null): ?string;
+public function getArray(string $key, ?array $default = null): ?array;
+public function getBool(string $key, ?bool $default = null): ?bool;
 ```
 
-#### `getBool(string $key, bool $default = false): bool`
-
-Retrieves a boolean value.
+Keys are dot-paths. Example:
 
 ```php
-$debug = $config->getBool('waffle.debug', false);
+$level = $config->getInt('waffle.security.level', default: 1);     // 1 .. 10
+$paths = $config->getArray('waffle.trusted_hosts', default: []);
+$debug = $config->getBool('app.debug', default: false);
 ```
 
-#### `getArray(string $key, ?array $default = null): ?array`
+## File layout
 
-Retrieves an array.
-
-```php
-$settings = $config->getArray('waffle.modules');
+```
+config/
+├── app.yaml           # base, always loaded if it exists
+├── app_dev.yaml       # environment overlay
+├── app_prod.yaml      # environment overlay
+└── app_test.yaml      # environment overlay
 ```
 
-## Structure
+`Config::loadConfigurationFiles()`:
 
-Configuration keys are dot-notated. For example, `waffle.security.level` corresponds to:
+1. Loads `app.yaml` if it exists.
+2. Loads `app_{environment}.yaml` if it exists; merges on top via `array_replace_recursive`.
+3. Resolves `%env(VAR)%` placeholders anywhere in the merged tree by reading `getenv()`.
+
+## Failsafe mode
 
 ```yaml
+# No app.yaml needed — Failsafe::ENABLED seeds:
 waffle:
   security:
     level: 1
 ```
 
-## Environment Variables
+Pass `Failsafe::ENABLED` to skip filesystem loading entirely and use the safe baseline. Used by the `ErrorHandlerMiddleware` boot path so a totally broken config still allows the error renderer to function.
 
-You can reference environment variables in your YAML files using the `%env(VAR_NAME)%` syntax.
+## Sibling classes
 
-```yaml
-database:
-  password: '%env(DB_PASSWORD)%'
-```
+- `Waffle\Commons\Config\YamlParser` — `final` wrapper around `yaml_parse_file()`.
+- `Waffle\Commons\Config\DotEnv` — `.env` file loader writing into `getenv()`.
+- `Waffle\Commons\Config\Trait\ParserTrait` — shared parse helpers.
+- `Waffle\Commons\Config\Exception\InvalidConfigurationException` — implements `InvalidConfigurationExceptionInterface`.

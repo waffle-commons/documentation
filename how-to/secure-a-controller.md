@@ -1,32 +1,92 @@
 # How-To: Secure a Controller
 
-Waffle Framework enforces security through a **Global Security Level** system. Instead of securing individual controllers with attributes, you define a security baseline for your entire application. The framework ensures all instantiated objects, including controllers, adhere to this level.
+> **Beta 0** — Waffle ships two complementary security layers: a **global security level** that gates every controller via the rule ladder, and **per-method attributes** (`#[Rule]`, `#[Voter]`, `#[RequiresCsrfToken]`) for finer-grained control.
 
-## Configuration
+## 1. Configure the global security level
 
-The security level is configured in your `config/app.yaml` file under the `waffle.security.level` key.
+The kernel reads `waffle.security.level` from `config/app.yaml` and constructs `Waffle\Commons\Security\Security` with it. Levels are integers from `1` (public) to `10` (paranoid).
 
 ```yaml
+# config/app.yaml
 waffle:
   security:
-    level: 1 # Levels 1-10
+    level: 5      # see Constant::SECURITY_LEVEL1 … SECURITY_LEVEL10
 ```
 
-## Security Levels
+When `SecurityMiddleware` runs the resolved controller through `Security::analyze()`, every `LevelNRule` from 1 up to your configured level is evaluated. Any `LevelNRule::isValid()` returning `false` raises a `SecurityExceptionInterface`, which the `ErrorHandlerMiddleware` renders as HTTP `403`.
 
-The security monitoring is performed by the `SecureContainer` when retrieving services or controllers.
+## 2. Tighten with `#[Rule]` on a method or class
 
-- **Level 1 (Basic)**: Validates object integrity. Ensures that the instantiated object is actually an instance of its declared class.
-- **Level 2-10 (Advanced)**: Applies progressively stricter auditing rules. (See `Waffle\Commons\Security\Rule` namespace for implementation details of each level).
+Use `Waffle\Commons\Contracts\Security\Attribute\Rule` to declare the **minimum** security level a route requires. If the kernel's effective level is below that, execution is denied.
 
-## How It Works
+```php
+use Waffle\Commons\Contracts\Security\Attribute\Rule;
+use Waffle\Commons\Contracts\Constant\Constant;
 
-1.  **Request**: When a request comes in, the `ControllerDispatcher` requests the controller from the `SecureContainer`.
-2.  **Analysis**: The `SecureContainer` intercepts this request and passes the object to the `Security` service.
-3.  **Enforcement**: The `Security` service runs the configured `LevelXRule` checks on the controller instance.
-4.  **Result**:
-    - If valid, the controller is returned and executed.
-    - If invalid, a `SecurityException` is thrown, returning a 500 error (or handled by your Error Handler).
+final class AdminController
+{
+    #[Rule(level: Constant::SECURITY_LEVEL10)]
+    public function dropDatabase(): ResponseInterface
+    {
+        // Only reachable when the kernel's level >= 10.
+    }
+}
+```
 
-> [!NOTE]
-> Currently, per-controller security attributes (like `#[Rule]`) are not supported. Security is enforced globally to ensure a consistent security posture across the entire application.
+Class-level `#[Rule]` applies to every method on the class; method-level `#[Rule]` overrides the class default for that method.
+
+## 3. ABAC voters via `#[Voter]`
+
+For decisions that depend on per-request state (user roles, ownership, etc.), declare a `#[Voter]` whose `decide()` method runs at dispatch time:
+
+```php
+use Waffle\Commons\Contracts\Security\Attribute\Voter;
+use Waffle\Commons\Contracts\Security\VoterInterface;
+
+#[Voter(name: IsAdminVoter::class)]
+final class AdminController
+{
+    public function deleteAction(): ResponseInterface { /* … */ }
+}
+
+final class IsAdminVoter implements VoterInterface
+{
+    public function decide(): bool
+    {
+        // Check user roles / session / signed claims here.
+        return false;
+    }
+}
+```
+
+`#[Voter]` is repeatable (`Attribute::IS_REPEATABLE`); the request is denied if **any** voter returns `false`.
+
+## 4. CSRF on mutating routes
+
+For `POST` / `PUT` / `PATCH` / `DELETE` endpoints, add `#[RequiresCsrfToken]`:
+
+```php
+use Waffle\Commons\Contracts\Security\Csrf\Attribute\RequiresCsrfToken;
+
+#[RequiresCsrfToken]
+public function transferFunds(ServerRequestInterface $request): ResponseInterface
+{
+    // CsrfMiddleware validated the double-submit token before reaching here.
+}
+```
+
+The middleware is stateless — it uses **HMAC-signed double-submit cookies**, with token storage delegated to a `Waffle\Commons\Contracts\Cache\CacheInterface` (typically `RedisCache` in production so multiple workers share token state).
+
+## 5. How the layers compose
+
+`SecurityMiddleware`:
+
+1. Reads `_controller` + `_method` from the request attributes (set by `CoreRoutingMiddleware`).
+2. Calls `Security::analyze($controller)` — checks the level ladder.
+3. Reads `#[Rule]` attributes — checks declared minimums.
+4. Reads `#[Voter]` attributes — calls each `VoterInterface::decide()`.
+5. Any failure → `SecurityExceptionInterface` → RFC 7807 `403`.
+
+`CsrfMiddleware` (when configured) runs the CSRF check on attributes tagged `#[RequiresCsrfToken]`.
+
+`SecureContainer` (optional layer) wraps the PSR-11 container and applies `Security::analyze()` before every `get()` — preventing low-privilege code from pulling sensitive services.
