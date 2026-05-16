@@ -1,34 +1,27 @@
-# Quick Start Guide
+# Quick Start Guide (`v0.1.0-beta0`)
 
-Welcome to the Waffle Framework! This guide will help you set up a new project and create your first Controller.
+Welcome to the Waffle Framework. This guide walks you through scaffolding a new project from the `waffle-commons/skeleton` template, writing your first controller, and understanding how the Kernel + Runtime fit together.
 
 ## Prerequisites
 
-- PHP 8.5 or higher *(optional)*
-- Composer
-- Docker
+- **PHP 8.5+** (strictly enforced — Property Hooks, Asymmetric Visibility, typed constants).
+- **Composer** 2.x.
+- **Docker** with Docker Compose (the skeleton ships with a FrankenPHP-based `docker-compose.yml`).
+- **`ext-yaml`** (the native PECL YAML extension — the `waffle-dev` Docker image ships with it).
 
-## 1. Installation
-
-Create a new project using Composer:
+## 1. Create the project
 
 ```bash
 composer create-project waffle-commons/skeleton my-app
 cd my-app
-```
-
-Start the development server using the built-in PHP server or Docker:
-
-```bash
-# Using Docker Compose
 docker compose up -d
 ```
 
-Your application is now running at `https://localhost/`.
+The default skeleton serves on `https://localhost/` (FrankenPHP terminates TLS with a self-signed cert).
 
-## 2. Create a Controller
+## 2. Write your first controller
 
-Let's create a simple "Hello World" controller. Create a file named `src/Controller/HelloController.php`:
+Create `src/Controller/HelloController.php`:
 
 ```php
 <?php
@@ -38,6 +31,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Waffle\Commons\Routing\Attribute\Route;
 use Waffle\Core\BaseController;
 
@@ -51,63 +45,135 @@ final class HelloController extends BaseController
 }
 ```
 
-> [!NOTE]
-> We extend `Waffle\Core\BaseController` to access helper methods like `jsonResponse()`.
-> Routes are defined using the `#[Route]` attribute from `Waffle\Commons\Routing\Attribute`.
+`BaseController::jsonResponse()` returns a PSR-7 `ResponseInterface` with `Content-Type: application/json`.
 
-## 3. Test Your Endpoint
-
-Open your browser or use `curl` to visit the new endpoint:
+## 3. Hit the endpoint
 
 ```bash
-curl https://localhost/hello/Waffle
+curl -k https://localhost/hello/Waffle
 ```
 
-**Expected Output:**
+Expected output:
 
 ```json
+{"message":"Hello Waffle"}
+```
+
+## 4. The Kernel — assembled in your `AppKernelFactory`
+
+The skeleton's `src/Factory/AppKernelFactory.php` wires every component the kernel needs. The setter contract is verbatim from `Waffle\Abstract\AbstractKernel`:
+
+```php
+public function setContainerImplementation(PsrContainerInterface $container): void;
+public function setConfiguration(ConfigInterface $config): void;
+public function setSecurity(SecurityInterface $security): void;
+public function setMiddlewareStack(MiddlewareStackInterface $stack): void;
+public function setEventDispatcher(EventDispatcherInterface $dispatcher): void;
+```
+
+The PSR-3 logger is passed to the constructor (default `NullLogger`):
+
+```php
+public function __construct(protected LoggerInterface $logger = new NullLogger())
+```
+
+Sketch of a factory:
+
+```php
+use Waffle\Kernel;
+use Waffle\Commons\Config\Config;
+use Waffle\Commons\Container\Container;
+use Waffle\Commons\EventDispatcher\Dispatcher\EventDispatcher;
+use Waffle\Commons\EventDispatcher\Provider\ListenerProvider;
+use Waffle\Commons\ErrorHandler\Middleware\ErrorHandlerMiddleware;
+use Waffle\Commons\ErrorHandler\Renderer\JsonErrorRenderer;
+use Waffle\Commons\Http\Factory\ResponseFactory;
+use Waffle\Commons\Log\StreamLogger;
+use Waffle\Commons\Pipeline\MiddlewareStack;
+use Waffle\Commons\Pipeline\CoreRoutingMiddleware;
+use Waffle\Commons\Pipeline\Middleware\TrustedHostMiddleware;
+use Waffle\Commons\Security\Security;
+
+final class AppKernelFactory
 {
-  "message": "Hello Waffle!"
+    public static function create(string $env = 'prod', bool $debug = false): Kernel
+    {
+        $config = new Config(APP_ROOT . '/config', $env);
+        $logger = new StreamLogger(streamPath: 'php://stderr');
+
+        $container = new Container([
+            ConfigInterface::class => $config,
+            LoggerInterface::class => $logger,
+        ]);
+
+        $renderer = new JsonErrorRenderer(new ResponseFactory(), debug: $debug);
+        $router   = /* build via RouteDiscoverer over waffle.paths.controllers */;
+        $stack    = (new MiddlewareStack())
+            ->add(new ErrorHandlerMiddleware($renderer, $logger))
+            ->add(new TrustedHostMiddleware($config->getArray('waffle.trusted_hosts', []) ?? []))
+            ->add(new CoreRoutingMiddleware($router));
+
+        $kernel = new Kernel($logger);
+        $kernel->setConfiguration($config);
+        $kernel->setContainerImplementation($container);
+        $kernel->setSecurity(new Security($config));
+        $kernel->setMiddlewareStack($stack);
+        $kernel->setEventDispatcher(new EventDispatcher(new ListenerProvider()));
+
+        return $kernel;
+    }
 }
 ```
 
-## 4. Bootstrapping the Kernel
+The kernel boots lazily — the very first `handle()` call calls `boot()->configure()` if not already booted, so the factory does not need to call these explicitly.
 
-The Kernel is the heart of your application. In Alpha 5, it requires an **Event Dispatcher** and a **Logger** to be fully functional.
+## 5. The Runtime — `public/index.php`
 
-These are typically configured in your Kernel Factory (`src/Factory/AppKernelFactory.php`):
+The runtime is `Waffle\Commons\Runtime\WaffleRuntime`. Its public API is:
 
 ```php
-use Waffle\Commons\Log\StreamLogger;
-use Waffle\Commons\EventDispatcher\Dispatcher\EventDispatcher;
-use Waffle\Commons\EventDispatcher\Provider\ListenerProvider;
+public function __construct(
+    ?GlobalsFactory $globalsFactory = null,
+    ?ResponseEmitterInterface $emitter = null,
+);
 
-$logger = new StreamLogger(streamPath: 'php://stderr');
-$dispatcher = new EventDispatcher(new ListenerProvider());
-
-$kernel = new AppKernel();
-$kernel->setLogger($logger);
-$kernel->setEventDispatcher($dispatcher);
-$kernel->setConfiguration($config);
-$kernel->setSecurity($security);
-
-$kernel->boot()->configure();
+public function loop(KernelInterface $kernel, int $maxRequests = 500): void;
 ```
 
-## 5. Understanding the Entry Point
-
-The application entry point `public/index.php` leverages `WaffleRuntime` to orchestrate the lifecycle.
+A complete `public/index.php`:
 
 ```php
-// public/index.php
+<?php
+declare(strict_types=1);
+
 use Waffle\Commons\Runtime\WaffleRuntime;
 use App\Factory\AppKernelFactory;
 
-$kernel = AppKernelFactory::create($env, $debug);
-$request = AppKernelFactory::createRequest();
+require __DIR__ . '/../vendor/autoload.php';
 
-$runtime = new WaffleRuntime();
-$runtime->run($kernel, $request);
+define('APP_ROOT', dirname(__DIR__));
+
+$kernel = AppKernelFactory::create(
+    env: getenv('APP_ENV') ?: 'prod',
+    debug: getenv('APP_DEBUG') === 'true',
+);
+
+(new WaffleRuntime())->loop($kernel, maxRequests: 500);
 ```
 
-Congratulations! You have successfully built and configured your first Waffle application with full logging and event support.
+Under FrankenPHP worker mode, `loop()`:
+
+1. Calls `$kernel->boot()->configure()` once.
+2. Repeatedly calls `frankenphp_handle_request($handler)` where `$handler` rebuilds the PSR-7 request from superglobals, calls `$kernel->handle()`, and emits the response.
+3. Runs `gc_collect_cycles()` every 50 requests.
+4. Calls `$kernel->reset()` when the loop exits.
+
+Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the handler runs once and exits.
+
+## 6. What's next
+
+- Add real validation: see [How-To: Routing](../how-to/routing.md) for `#[Argument]` parameter injection.
+- Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
+- Hook into the lifecycle: see [How-To: Events](../how-to/events.md) for `RequestReceivedEvent`, `ResponseGeneratedEvent`, `TerminateEvent`.
+
+You now have a working Beta 0 Waffle application with full PSR-7/15/17 plumbing, Mago Zero-Debt under `composer mago`, and worker-mode safe runtime.
