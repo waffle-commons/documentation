@@ -13,7 +13,7 @@ myapp:
   timeout: 30
 ```
 
-*Note: Use `%env(VAR)%` to inject environment variables securely.*
+`%env(VAR)%` placeholders are resolved at boot time against an **injected env registry** (`Config`'s fourth constructor argument). The registry is built by `AppKernelFactory` by merging the parsed `.env` file with the live process environment — see [Environment variables: how the merge works](#environment-variables-how-the-merge-works) below for the precedence rules.
 
 ## Injecting Configuration into a Service
 
@@ -40,3 +40,66 @@ class ApiClient
 ```
 
 The Container will automatically inject the active configuration instance when `ApiClient` is requested.
+
+## Environment variables: how the merge works
+
+> **Beta 1 change.** `DotEnv` no longer mutates the global PHP environment (no `putenv()`, no writes to `$_ENV` / `$_SERVER`). Instead, `AppKernelFactory` reads the `.env` file via `DotEnv::load()`, merges it with `getenv()`, and injects the result into `Config`. This is required for FrankenPHP worker-mode safety (worker mode shares process state across requests; the legacy `putenv()` was not thread-safe).
+
+The canonical wiring (already in `skeleton` and `workspace` `AppKernelFactory`):
+
+```php
+$processEnv  = getenv();                                // OS / Docker / Kubernetes
+$envRegistry = array_merge((new DotEnv($root))->load(), $processEnv);
+
+$config = new Config(
+    configDir:   $rootConfig,
+    environment: $env,
+    env:         $envRegistry,
+);
+```
+
+### Who wins when both define the same key?
+
+`array_merge` with string keys is **rightmost-wins**, so the process environment beats `.env`:
+
+| Source | Position in `array_merge` | Wins? |
+| :--- | :--- | :--- |
+| `.env` / `.env.local` | left | no |
+| OS / Docker / Kubernetes (`getenv()`) | right | **yes** |
+
+#### Concrete example
+
+| Source | Declares | Result |
+| :--- | :--- | :--- |
+| `.env` | `APP_DEBUG=true` (normalized to `'1'`) | overridden |
+| Docker `environment:` | `APP_DEBUG=false` | **kept** — `$envRegistry['APP_DEBUG'] === 'false'` |
+
+If you just edited `.env` and it doesn't appear to take effect, **check whether the same variable is exported by your shell or Docker compose file** — the OS export will silently win.
+
+To make `.env` source-of-truth instead, flip the merge order in your `AppKernelFactory`:
+
+```php
+$envRegistry = array_merge($processEnv, (new DotEnv($root))->load()); // .env wins
+```
+
+### Type-normalization asymmetry (foot-gun)
+
+`DotEnv` validates and normalizes `APP_DEBUG` / `DEBUG`:
+
+- `APP_DEBUG=true` / `yes` / `on` / `1` → stored as `'1'`
+- `APP_DEBUG=false` / `no` / `off` / `0` → stored as `'0'`
+- Anything else (e.g. `APP_DEBUG=maybe`) → `InvalidArgumentException`
+
+`getenv()` does **not** perform this normalization — it returns whatever the OS gave us, character-for-character. So:
+
+| Source | Value | After DotEnv | After getenv() |
+| :--- | :--- | :--- | :--- |
+| `.env` | `APP_DEBUG=yes` | `'1'` | — |
+| OS export | `APP_DEBUG=yes` | — | `'yes'` |
+
+When the YAML uses `'%env(APP_DEBUG)%'` and `Config::getBool('app.debug')` is called, the second case throws `InvalidConfigurationException` because `'yes'` is a string, not a YAML boolean.
+
+**Safe patterns:**
+- Always export OS env values in the canonical form (`true` / `false` or `1` / `0`).
+- Or normalize `$processEnv` yourself before merging.
+- Or expose booleans in YAML as literals (`debug: true`) instead of `%env()%` placeholders.
