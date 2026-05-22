@@ -1,6 +1,6 @@
 # Core Reference (`waffle-commons/waffle`)
 
-> **Release:** `v0.1.0-beta0`
+> **Release:** `v0.1.0-beta1`
 
 The framework kernel. Orchestrates the PSR-15 middleware stack, dispatches lifecycle events, and resolves controllers via the container. The kernel itself stays agnostic of routing, security, logging, and HTTP — every concrete dependency is injected.
 

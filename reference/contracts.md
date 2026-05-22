@@ -1,8 +1,15 @@
 # Contracts Reference (`waffle-commons/contracts`)
 
-> **Release:** `v0.1.0-beta0` — the contracts surface is **frozen** for Beta 0.
+> **Release:** `v0.1.0-beta1`
 
 `waffle-commons/contracts` is the root package of the Waffle ecosystem. Every other component depends only on the contracts package plus its own declared PSR dependencies. The package contains interfaces, marker attributes, enums, exception interfaces, and ecosystem-wide typed constants — **no business logic**.
+
+## Beta-1 changelog (one breaking change, three additions)
+
+- **BREAKING** — `Waffle\Commons\Contracts\Security\Csrf\CsrfTokenManagerInterface::issue()`, `validate()`, and `refresh()` now take a `$sessionId` argument, folded into the HMAC payload so tokens bind to a single browser. See [security.md](security.md) and the [CSRF explanation](../explanation/security-csrf-double-submit.md).
+- **NEW** — `Waffle\Commons\Contracts\Security\Attribute\PublicAccess`, the explicit opt-out for the new fail-closed ABAC default. See [attributes-public-access.md](attributes-public-access.md).
+- **NEW** — `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (concrete, `final`, implements the existing `RouteNotFoundExceptionInterface`). Thrown by `CoreRoutingMiddleware` so missing routes render as `404`, not `500`.
+- **NEW** — CSRF binding constants on `Waffle\Commons\Contracts\Security\Csrf\Constant`: `SESSION_COOKIE_NAME = 'WAFFLE_SID'`, `SESSION_ID_BYTES = 32`, `SESSION_REQUEST_ATTRIBUTE = '_anon_sid'`, `SESSION_COOKIE_MAX_AGE = 2_592_000`, plus `MIN_SECRET_BYTES = 32` and `SECRET_ENV_KEY = 'WAFFLE_CSRF_SECRET'`.
 
 ## Core
 
@@ -226,7 +233,7 @@ interface ViolationInterface
 }
 ```
 
-Beta 0 strongly favors **Property Hooks on `readonly` DTOs** over external validators — the validator interfaces are reserved for cases where validation must happen outside the DTO's own constructor.
+Beta-1 strongly favors **Property Hooks on `readonly` DTOs** over external validators — the validator interfaces are reserved for cases where validation must happen outside the DTO's own constructor.
 
 ## Marker attributes
 
@@ -324,7 +331,7 @@ Component-specific constant classes live alongside their interfaces: `Waffle\Com
 The contracts package declares interfaces (never concrete exceptions). Implementations live in each consuming component.
 
 - `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface` — exposes `getField(): ?string` for RFC 7807 enrichment.
-- `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundExceptionInterface`.
+- `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundExceptionInterface` — and, since Beta-1, the concrete `RouteNotFoundException` (also in contracts) that the pipeline throws on a missed route.
 - `Waffle\Commons\Contracts\Cache\Exception\CacheExceptionInterface` and friends.
 - `Waffle\Commons\Contracts\Security\Exception\SecurityExceptionInterface` and friends.
 - `Waffle\Commons\Contracts\Config\Exception\InvalidConfigurationExceptionInterface`.

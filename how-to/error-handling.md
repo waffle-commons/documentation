@@ -1,6 +1,6 @@
 # How-To: Error Handling
 
-> **Beta 0** — Waffle ships a PSR-15 `ErrorHandlerMiddleware` paired with an RFC 7807 ("Problem Details for HTTP APIs") JSON renderer.
+> **Beta-1** — Waffle ships a PSR-15 `ErrorHandlerMiddleware` paired with an RFC 7807 ("Problem Details for HTTP APIs") JSON renderer.
 
 ## 1. Automatic handling
 

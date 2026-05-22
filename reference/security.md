@@ -1,8 +1,29 @@
 # Security Reference (`waffle-commons/security`)
 
-> **Release:** `v0.1.0-beta0`
+> **Release:** `v0.1.0-beta1`
 
-Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a stateless CSRF protection layer and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
+Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a fully stateless CSRF protection layer (signed double-submit with per-browser binding) and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
+
+## Canonical Beta-1 middleware order
+
+```
+ErrorHandler → TrustedHost → AnonymousSession → Routing → Csrf → Security → SecureHeaders → Dispatcher
+```
+
+`AnonymousSessionMiddleware` issues a per-browser `WAFFLE_SID` cookie (32 random bytes, base64url, 30-day Max-Age, HttpOnly, SameSite=Lax, Secure on HTTPS). The SID is the per-browser handle the CSRF HMAC binds to.
+
+## Required configuration
+
+```yaml
+# config/app.yaml
+waffle:
+  security:
+    level: 5
+    csrf:
+      # 32+ byte signing secret. Resolved from env WAFFLE_CSRF_SECRET when set
+      # to '%env(...)%'. In prod a missing/short value aborts boot.
+      secret: '%env(WAFFLE_CSRF_SECRET)%'
+```
 
 ## `Security` — exact signature
 
@@ -53,9 +74,19 @@ PSR-15 middleware that:
 3. Lets the request pass on success; raises `SecurityExceptionInterface` on failure (rendered as `403` by the error handler).
 4. Logs access denials via the injected PSR-3 logger.
 
+### `Waffle\Commons\Security\Middleware\AnonymousSessionMiddleware`
+
+PSR-15 middleware that ensures every request carries an anonymous-session identifier (`WAFFLE_SID` cookie). On first hit it mints a 32-byte random value, publishes it as the `_anon_sid` request attribute for downstream middleware, and emits a `Set-Cookie` header on the response. Subsequent requests reuse the existing cookie. **No `$_SESSION`, no server-side store** — the cookie carries the identifier. Required for `CsrfMiddleware` to bind tokens to a single browser.
+
 ### `Waffle\Commons\Security\Middleware\CsrfMiddleware`
 
-Stateless CSRF protection using **double-submit cookies** with HMAC-signed tokens. **No PHP sessions are ever touched** — the implementation is FrankenPHP-safe. Tokens are issued / validated through `Waffle\Commons\Contracts\Security\Csrf\CsrfTokenManagerInterface`, with backing storage delegated to a `CacheInterface` (typically `RedisCache` in production for cross-worker token sharing).
+Stateless CSRF protection using **signed double-submit cookies with per-browser binding** (Beta-1 / SEC-01 option C). Tokens are self-validating signed payloads:
+
+```
+nonce (16 bytes) || expiresAt (8 bytes BE uint64) || HMAC-SHA256(nonce || expiresAt || id || sessionId, secret)
+```
+
+The logical `id` prevents cross-form replay; the `sessionId` (from the `_anon_sid` request attribute) prevents cross-browser replay. **No PHP sessions, no cache, no server-side storage.** Tokens are issued / validated through `Waffle\Commons\Contracts\Security\Csrf\CsrfTokenManagerInterface`. Validation uses `hash_equals()` for constant-time comparison.
 
 ## `SecureContainer`
 

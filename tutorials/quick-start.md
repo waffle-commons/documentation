@@ -1,4 +1,4 @@
-# Quick Start Guide (`v0.1.0-beta0`)
+# Quick Start Guide (`v0.1.0-beta1`)
 
 Welcome to the Waffle Framework. This guide walks you through scaffolding a new project from the `waffle-commons/skeleton` template, writing your first controller, and understanding how the Kernel + Runtime fit together.
 
@@ -77,12 +77,14 @@ The PSR-3 logger is passed to the constructor (default `NullLogger`):
 public function __construct(protected LoggerInterface $logger = new NullLogger())
 ```
 
-Sketch of a factory:
+Sketch of a factory (Beta-1 wiring — CSRF subsystem wired by default):
 
 ```php
 use Waffle\Kernel;
 use Waffle\Commons\Config\Config;
 use Waffle\Commons\Container\Container;
+use Waffle\Commons\Contracts\Security\Csrf\Constant as CsrfConstant;
+use Waffle\Commons\Contracts\Security\Csrf\CsrfTokenManagerInterface;
 use Waffle\Commons\EventDispatcher\Dispatcher\EventDispatcher;
 use Waffle\Commons\EventDispatcher\Provider\ListenerProvider;
 use Waffle\Commons\ErrorHandler\Middleware\ErrorHandlerMiddleware;
@@ -91,7 +93,12 @@ use Waffle\Commons\Http\Factory\ResponseFactory;
 use Waffle\Commons\Log\StreamLogger;
 use Waffle\Commons\Pipeline\MiddlewareStack;
 use Waffle\Commons\Pipeline\CoreRoutingMiddleware;
+use Waffle\Commons\Pipeline\Middleware\SecureHeadersMiddleware;
 use Waffle\Commons\Pipeline\Middleware\TrustedHostMiddleware;
+use Waffle\Commons\Security\Csrf\CsrfTokenManager;
+use Waffle\Commons\Security\Middleware\AnonymousSessionMiddleware;
+use Waffle\Commons\Security\Middleware\CsrfMiddleware;
+use Waffle\Commons\Security\Middleware\SecurityMiddleware;
 use Waffle\Commons\Security\Security;
 
 final class AppKernelFactory
@@ -101,17 +108,33 @@ final class AppKernelFactory
         $config = new Config(APP_ROOT . '/config', $env);
         $logger = new StreamLogger(streamPath: 'php://stderr');
 
+        // SEC-01: CSRF signing secret. Config wins over env; in prod a missing
+        // or short value MUST abort boot. See AppKernelFactory::resolveCsrfSecret()
+        // in the skeleton for the canonical resolver.
+        $csrfSecret = $config->getString('waffle.security.csrf.secret')
+            ?? (getenv(CsrfConstant::SECRET_ENV_KEY) ?: null);
+        $csrfTokenManager = new CsrfTokenManager(secret: $csrfSecret);
+
         $container = new Container([
             ConfigInterface::class => $config,
             LoggerInterface::class => $logger,
+            CsrfTokenManagerInterface::class => $csrfTokenManager,
         ]);
 
         $renderer = new JsonErrorRenderer(new ResponseFactory(), debug: $debug);
         $router   = /* build via RouteDiscoverer over waffle.paths.controllers */;
-        $stack    = (new MiddlewareStack())
+
+        // Canonical Beta-1 order:
+        // ErrorHandler → TrustedHost → AnonymousSession → Routing → Csrf →
+        // Security → SecureHeaders → Dispatcher.
+        $stack = (new MiddlewareStack())
             ->add(new ErrorHandlerMiddleware($renderer, $logger))
             ->add(new TrustedHostMiddleware($config->getArray('waffle.trusted_hosts', []) ?? []))
-            ->add(new CoreRoutingMiddleware($router));
+            ->add(new AnonymousSessionMiddleware())
+            ->add(new CoreRoutingMiddleware($router))
+            ->add(new CsrfMiddleware($csrfTokenManager))
+            ->add(new SecurityMiddleware(new Security($config), $logger))
+            ->add(new SecureHeadersMiddleware());
 
         $kernel = new Kernel($logger);
         $kernel->setConfiguration($config);
@@ -124,6 +147,8 @@ final class AppKernelFactory
     }
 }
 ```
+
+`AnonymousSessionMiddleware` issues the `WAFFLE_SID` cookie that `CsrfMiddleware` binds tokens to — both pieces must be present in the stack for CSRF protection to work. See [How-To: Secure a Controller](../how-to/secure-a-controller.md) and the [CSRF explanation](../explanation/security-csrf-double-submit.md) for the design rationale.
 
 The kernel boots lazily — the very first `handle()` call calls `boot()->configure()` if not already booted, so the factory does not need to call these explicitly.
 
@@ -176,4 +201,4 @@ Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the han
 - Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
 - Hook into the lifecycle: see [How-To: Events](../how-to/events.md) for `RequestReceivedEvent`, `ResponseGeneratedEvent`, `TerminateEvent`.
 
-You now have a working Beta 0 Waffle application with full PSR-7/15/17 plumbing, Mago Zero-Debt under `composer mago`, and worker-mode safe runtime.
+You now have a working Beta-1 Waffle application with full PSR-7/15/17 plumbing, Mago Zero-Debt under `composer mago`, fail-closed ABAC, stateless HMAC CSRF, and worker-mode safe runtime.

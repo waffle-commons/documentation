@@ -1,6 +1,6 @@
 # Routing Reference (`waffle-commons/routing`)
 
-> **Release:** `v0.1.0-beta0`
+> **Release:** `v0.1.0-beta1`
 
 Attribute-driven router. Routes live next to the controller code via the `#[Route]` attribute; the `RouteDiscoverer` scans the configured controller directory at boot time and the compiled table is cached.
 
@@ -105,7 +105,7 @@ public function matchRequest(ServerRequestInterface $request): ?array;
 public function getRoutes(): array;
 ```
 
-`matchRequest()` returns `null` when no route matches — the kernel converts that to `RouteNotFoundException` (rendered as RFC 7807 `404` by the error handler).
+`matchRequest()` returns `null` when no route matches — `CoreRoutingMiddleware` converts that to the concrete `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (rendered as RFC 7807 `404` by the error handler).
 
 ## Components
 

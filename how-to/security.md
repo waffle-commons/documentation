@@ -22,6 +22,12 @@ To enable it, ensure it's added to your Kernel's middleware stack. It will:
 2. Read any `#[Voter]` attributes.
 3. Deny access (403) if any voter rejects the request.
 
+## Fail-closed default (Beta-1)
+
+> An action without a `#[Voter]` is denied with HTTP `403` unless it explicitly carries `#[PublicAccess]`. Missing policy is treated as deny, not allow.
+
+This change is intentional — see [`#[PublicAccess]` reference](../reference/attributes-public-access.md) and the [Fail-Closed ABAC explanation](../explanation/security-fail-closed-abac.md).
+
 ## Using Granular Security Attributes
 
 You can apply specific security requirements using the `#[Voter]` attribute on a controller class or a specific method.
