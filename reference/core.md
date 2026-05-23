@@ -75,13 +75,14 @@ Called between FrankenPHP worker requests. Currently calls `$container->reset()`
 
 ## Lifecycle events
 
-All three live in `Waffle\Event\*`:
+All three live in `Waffle\Event\*`. As of Beta-1 (leftover-purge §2) they expose state via PHP 8.5 asymmetric visibility (`public private(set)`) — read with property access, replace with the immutable `with*()` factories. The legacy `get*()` getters have been removed.
 
-| Event | When | Stoppable | Mutators |
-| :--- | :--- | :--- | :--- |
-| `RequestReceivedEvent` | Before the middleware pipeline runs. | No | `getRequest()`, `setRequest()` |
-| `ResponseGeneratedEvent` | After the pipeline returns. | No | `getResponse()`, `setResponse()` |
-| `TerminateEvent` | After the response is emitted. | No | `getRequest()`, `getResponse()` |
+| Event | When | Stoppable | Read | Mutate |
+| :--- | :--- | :--- | :--- | :--- |
+| `RequestReceivedEvent` | Before the middleware pipeline runs. | No | `$event->request` | `$event->withRequest($r)` |
+| `ResponseGeneratedEvent` | After the pipeline returns. | No | `$event->response` | `$event->withResponse($r)` |
+| `TerminateEvent` | After the response is emitted. | No | `$event->request`, `$event->response` | — (immutable, post-emit) |
+| `ControllerArgumentsResolvedEvent` | Between argument resolution and controller invocation. | No | `$event->request`, `$event->controller`, `$event->method`, `$event->arguments` | — |
 
 ## Controller plumbing
 

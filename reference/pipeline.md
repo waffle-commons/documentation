@@ -37,11 +37,14 @@ This guarantees that middleware order cannot change while a request is in flight
 
 ### `Waffle\Commons\Pipeline\CoreRoutingMiddleware`
 
-Routes the request by calling `RouterInterface::matchRequest()`, then exposes the result on the request attributes:
+Routes the request by calling `RouterInterface::matchRequest()` (which returns the immutable `MatchedRoute` DTO since Beta-1 — see [`reference/routing`](routing.md#matchedroute-dto)), then exposes the result on the request attributes:
 
-- `_controller` — FQCN of the resolved controller class.
+- `_classname` — FQCN of the resolved controller class.
 - `_method` — method name to invoke.
-- `_route_params` — `array<string, mixed>` of `{placeholder}` values.
+- `_arguments` — `array<string, mixed>` of per-argument metadata from `#[Argument]`.
+- `_path` — original route path pattern.
+- `_name` — route name from `#[Route(name: ...)]`.
+- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the URI.
 
 When no route matches, raises `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (the concrete `final` class added in Beta-1, which implements `RouteNotFoundExceptionInterface` and is rendered as RFC 7807 `404` by `JsonErrorRenderer`). Beta-0 raised a generic `RuntimeException` here and produced a `500`; that mapping has been fixed.
 

@@ -78,30 +78,28 @@ interface RouterInterface
 {
     public function boot(ContainerInterface $container): static;
 
-    /**
-     * @return array{
-     *   classname: class-string,
-     *   method:    string,
-     *   arguments: array<string, mixed>,
-     *   path:      string,
-     *   name:      non-falsy-string,
-     *   params?:   array<string, mixed>
-     * }|null
-     */
-    public function matchRequest(ServerRequestInterface $request): ?array;
+    public function matchRequest(ServerRequestInterface $request): ?MatchedRoute;
 
-    /**
-     * @return array<array-key, array{
-     *   classname: class-string,
-     *   method:    string,
-     *   arguments: array<string, mixed>,
-     *   path:      string,
-     *   name:      non-falsy-string
-     * }>
-     */
+    /** @return list<MatchedRoute> */
     public function getRoutes(): array;
 }
+
+final readonly class MatchedRoute
+{
+    public function __construct(
+        public string $className,
+        public string $method,
+        public array  $arguments,
+        public string $path,
+        public string $name,
+        public array  $params = [],
+    ) {}
+
+    public function withParams(array $params): self;
+}
 ```
+
+`MatchedRoute` replaces the previous nested-array return shape — consumers now access typed properties (`$match->className`, `$match->params['id']`) instead of array keys. The interface still uses `?MatchedRoute` (null on miss) so `CoreRoutingMiddleware` can throw the typed `RouteNotFoundException`.
 
 ## Pipeline (PSR-15)
 

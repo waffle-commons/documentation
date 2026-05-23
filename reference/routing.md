@@ -81,31 +81,35 @@ From `Waffle\Commons\Contracts\Routing\RouterInterface`:
 ```php
 public function boot(ContainerInterface $container): static;
 
-/**
- * @return array{
- *   classname: class-string,
- *   method:    string,
- *   arguments: array<string, mixed>,
- *   path:      string,
- *   name:      non-falsy-string,
- *   params?:   array<string, mixed>,
- * }|null
- */
-public function matchRequest(ServerRequestInterface $request): ?array;
+public function matchRequest(ServerRequestInterface $request): ?MatchedRoute;
 
-/**
- * @return array<array-key, array{
- *   classname: class-string,
- *   method:    string,
- *   arguments: array<string, mixed>,
- *   path:      string,
- *   name:      non-falsy-string,
- * }>
- */
+/** @return list<MatchedRoute> */
 public function getRoutes(): array;
 ```
 
 `matchRequest()` returns `null` when no route matches — `CoreRoutingMiddleware` converts that to the concrete `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (rendered as RFC 7807 `404` by the error handler).
+
+### `MatchedRoute` DTO
+
+The router exposes its result as the immutable `Waffle\Commons\Contracts\Routing\MatchedRoute` DTO (Beta-1 leftover-purge §1): every consumer reads typed properties instead of decomposing a nested associative array.
+
+```php
+final readonly class MatchedRoute
+{
+    public function __construct(
+        public string $className,   // class-string of the controller
+        public string $method,      // method name on the controller
+        public array  $arguments,   // per-argument metadata from #[Argument]
+        public string $path,        // original route path (e.g. "/users/{id}")
+        public string $name,        // route name from #[Route(name: ...)]
+        public array  $params = [], // path parameters extracted for this request
+    ) {}
+
+    public function withParams(array $params): self;
+}
+```
+
+Read it via property access: `$match->className`, `$match->params['id']`, etc. The previous nested-array return shape has been removed — type-system enforcement now catches every typo at compile time instead of runtime.
 
 ## Components
 
