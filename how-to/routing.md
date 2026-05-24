@@ -88,11 +88,12 @@ use Waffle\Commons\Routing\Attribute\Route;
 final class GatewayController
 {
     /**
-     * Matches whatever single-segment path slipped past every priority-0 route.
-     * The negative class-level priority is inherited by every method that doesn't
-     * declare its own — so `fallback()` runs last automatically.
+     * Matches whatever path slipped past every priority-0 route. `{forwarded:.*}`
+     * spans every remaining segment, and the negative class-level priority is
+     * inherited by every method that doesn't declare its own — so `fallback()`
+     * runs last automatically.
      */
-    #[Route(path: '{forwarded}', name: 'fallback')]
+    #[Route(path: '{forwarded:.*}', name: 'fallback')]
     public function fallback(string $forwarded): ResponseInterface
     {
         // forward to the legacy backend …
@@ -104,4 +105,4 @@ final class GatewayController
 
 - **Method wins on conflict.** If a method declares a non-zero `priority`, it overrides the class-level value. Otherwise the class value is inherited (mirroring how `path` already composes).
 - **Default is `0`.** Unannotated routes keep their declaration order within the `priority = 0` bucket (PHP 8.5's `usort` is stable).
-- **Single segment only.** Catch-all `{name}` placeholders match one URL segment. Multi-segment regex placeholders (`{path:.*}`-style) are not yet supported by the matcher.
+- **Three placeholder forms.** `{name}` matches a single segment, `{name:regex}` constrains it (e.g. `{id:\d+}`), and `{name:.*}` spans multiple segments — the form a real gateway catch-all uses. Static text between placeholders is matched literally.
