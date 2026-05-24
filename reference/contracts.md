@@ -92,14 +92,15 @@ final readonly class MatchedRoute
         public array  $arguments,
         public string $path,
         public string $name,
-        public array  $params = [],
+        public array  $params   = [],
+        public int    $priority = 0,
     ) {}
 
     public function withParams(array $params): self;
 }
 ```
 
-`MatchedRoute` replaces the previous nested-array return shape — consumers now access typed properties (`$match->className`, `$match->params['id']`) instead of array keys. The interface still uses `?MatchedRoute` (null on miss) so `CoreRoutingMiddleware` can throw the typed `RouteNotFoundException`.
+`MatchedRoute` replaces the previous nested-array return shape — consumers now access typed properties (`$match->className`, `$match->params['id']`) instead of array keys. The interface still uses `?MatchedRoute` (null on miss) so `CoreRoutingMiddleware` can throw the typed `RouteNotFoundException`. Beta-1 Phase 3 adds `priority` — see [`reference/routing` → Priority & catch-all routes](routing.md#priority--catch-all-routes).
 
 ## Pipeline (PSR-15)
 

@@ -103,6 +103,7 @@ final readonly class MatchedRoute
         public string $path,        // original route path (e.g. "/users/{id}")
         public string $name,        // route name from #[Route(name: ...)]
         public array  $params = [], // path parameters extracted for this request
+        public int    $priority = 0, // higher matches first; -1000 = catch-all
     ) {}
 
     public function withParams(array $params): self;
@@ -110,6 +111,33 @@ final readonly class MatchedRoute
 ```
 
 Read it via property access: `$match->className`, `$match->params['id']`, etc. The previous nested-array return shape has been removed — type-system enforcement now catches every typo at compile time instead of runtime.
+
+## Priority & catch-all routes
+
+Beta-1 Phase 3 introduces the `priority` field on `#[Route]`. Higher values match first; the router sorts the compiled table by descending priority at boot time and caches the sorted collection so subsequent boots skip the sort. The default priority is `0`, so unannotated routes keep their declaration order within a single priority bucket.
+
+```php
+#[Route(path: '/', name: 'app')]
+final class AppController
+{
+    #[Route(path: 'users/{id}', name: 'user_show')]
+    public function show(int $id): array { /* ... */ }
+}
+
+// EcoShield Gateway forward: a catch-all that ONLY matches when no higher-
+// priority route claimed the URI. The negative priority guarantees it sits at
+// the tail of the compiled table.
+#[Route(path: '/', name: 'gateway', priority: -1000)]
+final class GatewayController
+{
+    #[Route(path: '{forwarded}', name: 'fallback')]
+    public function forward(string $forwarded): ResponseInterface { /* proxy to legacy monolith */ }
+}
+```
+
+**Method-level wins** — if a method's `#[Route]` declares a non-zero `priority`, it overrides the class-level value. If only the class declares one, every method inherits it. This mirrors how the `path` is already composed (class prefix + method suffix).
+
+**One-segment limit** — the current matcher recognises `{name}`-style placeholders only. A catch-all matches a single URL segment; multi-segment patterns (`{path:.*}`-style regex constraints) are not part of this phase.
 
 ## Components
 

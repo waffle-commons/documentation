@@ -74,3 +74,34 @@ final class ApiController extends BaseController
     }
 }
 ```
+
+## Catch-all & priority routing (Beta-1 Phase 3)
+
+The `#[Route]` attribute takes an optional `int $priority = 0`. The router sorts the compiled table by descending priority at boot time and **caches the sorted collection**, so a hot boot pays no sort cost. Higher numbers match first; negative numbers run last.
+
+This unlocks the EcoShield-Gateway pattern: a catch-all controller that forwards any URI no other controller claimed to the legacy monolith — without throwing `404`.
+
+```php
+use Waffle\Commons\Routing\Attribute\Route;
+
+#[Route(path: '/', name: 'gateway', priority: -1000)]
+final class GatewayController
+{
+    /**
+     * Matches whatever single-segment path slipped past every priority-0 route.
+     * The negative class-level priority is inherited by every method that doesn't
+     * declare its own — so `fallback()` runs last automatically.
+     */
+    #[Route(path: '{forwarded}', name: 'fallback')]
+    public function fallback(string $forwarded): ResponseInterface
+    {
+        // forward to the legacy backend …
+    }
+}
+```
+
+**Resolution rules**
+
+- **Method wins on conflict.** If a method declares a non-zero `priority`, it overrides the class-level value. Otherwise the class value is inherited (mirroring how `path` already composes).
+- **Default is `0`.** Unannotated routes keep their declaration order within the `priority = 0` bucket (PHP 8.5's `usort` is stable).
+- **Single segment only.** Catch-all `{name}` placeholders match one URL segment. Multi-segment regex placeholders (`{path:.*}`-style) are not yet supported by the matcher.

@@ -89,8 +89,8 @@ All three live in `Waffle\Event\*`. As of Beta-1 (leftover-purge §2) they expos
 | Class | Role |
 | :--- | :--- |
 | `Waffle\Handler\ControllerDispatcher` | Terminal PSR-15 handler. Resolves `_controller` + `_method` + `_route_params` from the request attributes and invokes the controller method. |
-| `Waffle\Handler\ControllerArgumentResolver` | Hydrates the controller method's arguments. Detects `#[Dto]` on a parameter's type and instantiates it from the parsed body (validation happens inside the DTO's Property Hooks). |
-| `Waffle\Handler\ControllerResponseConverter` | Converts a controller's scalar / array return into a PSR-7 `ResponseInterface`. |
+| `Waffle\Handler\ControllerArgumentResolver` | Hydrates the controller method's arguments. Detects `#[Dto]` on a parameter's type and instantiates it from the parsed body — validation happens inside the DTO's Property Hooks (RFC-011). Beta-1 Phase 3 (Task 3.2) translates Property Hook failures into a unified `ValidationException`: typed `ValidationExceptionInterface` bubbles verbatim (preserving `field`); plain `\InvalidArgumentException` or constructor-`\TypeError` is rewrapped as a `422` with `previous` chained. |
+| `Waffle\Handler\ControllerResponseConverter` | Converts a controller's scalar / array return into a PSR-7 `ResponseInterface`. String returns (auto-`text/html`) carry `Content-Security-Policy: default-src 'self'` + `X-Content-Type-Options: nosniff` headers as an XSS safety floor (Beta-1 Phase 3 Task 3.3). The CSP is configurable via the `$stringResponseCsp` constructor parameter. |
 | `Waffle\Core\BaseController` | Default `BaseControllerInterface` implementation; provides `jsonResponse()` and similar helpers. |
 | `Waffle\Abstract\AbstractController` | Abstract base that user controllers may extend. |
 

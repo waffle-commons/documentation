@@ -101,6 +101,43 @@ The renderer produces:
 
 The `field` key is added automatically when the exception implements `ValidationExceptionInterface` and `getField()` returns non-null (RFC-011).
 
+### DTO Property Hook failures (Beta-1 Phase 3)
+
+When a controller parameter is typed with a `#[Dto]`-marked class, `ControllerArgumentResolver` hydrates it from the parsed PSR-7 body and calls the constructor. Validation lives **inside the DTO's PHP 8.5 Property Hooks** — there is no external validator. Whatever the hook throws, the resolver translates to a unified `Waffle\Exception\ValidationException` (422) before the middleware pipeline ever sees it:
+
+| Hook throws | Resolver outcome |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface` (typed) | Bubbles verbatim — `field` is preserved. |
+| `\InvalidArgumentException` (standard PHP) | Wrapped as `ValidationException(422)`, `field: null`, `previous` chained. |
+| `\TypeError` (constructor signature mismatch, e.g. body sent string where DTO declares int) | Same as above — translated to 422 so misshapen input never bubbles up as a `500`. |
+
+Because translation happens at the resolver, the `JsonErrorRenderer` mapping above applies uniformly: the client always gets a clean `422` RFC 7807 payload with `field` when the DTO author opted into structured reporting (option 1), or without `field` for the other two cases.
+
+```php
+use Waffle\Commons\Contracts\Attribute\Dto;
+use Waffle\Exception\ValidationException;
+
+#[Dto]
+final class CreateUserDto
+{
+    public string $email {
+        set(string $value) {
+            if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                // Throwing a typed ValidationException preserves the `field`
+                // slot in the rendered 422 payload.
+                throw new ValidationException(message: 'Invalid email.', field: 'email');
+            }
+            $this->email = strtolower($value);
+        }
+    }
+
+    public function __construct(string $email)
+    {
+        $this->email = $email;
+    }
+}
+```
+
 ## 4. Customizing the renderer
 
 `JsonErrorRenderer`'s constructor takes a PSR-17 `ResponseFactoryInterface` and a `bool $debug` flag:
