@@ -59,7 +59,85 @@ Expected output:
 {"message":"Hello Waffle"}
 ```
 
-## 4. The Kernel — assembled in your `AppKernelFactory`
+## 4. Validate input with a DTO (PHP 8.5 Property Hooks)
+
+Waffle ships **no validation package**. Input validation is *domain logic that belongs to the value itself*, expressed with PHP 8.5 **Property Hooks**. When a controller parameter is type-hinted with a class marked `#[Dto]`, the `ControllerArgumentResolver` decodes the JSON request body, maps its keys to the constructor parameters by name, and instantiates the object — the hook does the validating.
+
+Create `src/Dto/HelloInput.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Dto;
+
+use InvalidArgumentException;
+use Waffle\Commons\Contracts\Attribute\Dto;
+
+#[Dto]
+final class HelloInput
+{
+    public function __construct(
+        // `private(set)` makes the value read-only to callers (the DTO is
+        // effectively immutable) while the `set` hook still validates on
+        // hydration. A `set` hook cannot live on a `readonly` property, so
+        // asymmetric visibility is the idiomatic way to get both.
+        public private(set) string $name {
+            set(string $value) {
+                $clean = trim($value);
+
+                if ($clean === '' || preg_match('/^\p{L}+$/u', $clean) !== 1) {
+                    throw new InvalidArgumentException('Field "name" must be a non-empty, alphabetic string.');
+                }
+
+                $this->name = $clean;
+            }
+        },
+    ) {}
+}
+```
+
+Type-hint it in a controller action — hydration and validation happen *before* your code runs:
+
+```php
+#[Route(path: '/greet', name: 'greet')]
+public function greet(HelloInput $input): ResponseInterface
+{
+    return $this->jsonResponse(data: ['message' => "Hello {$input->name}!"]);
+}
+```
+
+A valid body passes straight through:
+
+```bash
+curl -k -X POST https://localhost/greet \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada"}'
+# → 200 {"message":"Hello Ada!"}
+```
+
+An invalid one never reaches your action — the hook throws, and the `ErrorHandlerMiddleware` renders an RFC 7807 `422`:
+
+```bash
+curl -k -X POST https://localhost/greet \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada123"}'
+```
+
+```json
+{
+  "type":     "about:blank",
+  "title":    "Unprocessable Entity",
+  "status":   422,
+  "detail":   "Field \"name\" must be a non-empty, alphabetic string.",
+  "instance": "/greet"
+}
+```
+
+A plain `\InvalidArgumentException` thrown from a hook is automatically unified to a `422`; throw a `Waffle\Exception\ValidationException` instead when you want the `field` key populated in the payload. See [How-To: Error Handling](../how-to/error-handling.md) for the complete mapping.
+
+## 5. The Kernel — assembled in your `AppKernelFactory`
 
 The skeleton's `src/Factory/AppKernelFactory.php` wires every component the kernel needs. The setter contract is verbatim from `Waffle\Abstract\AbstractKernel`:
 
@@ -152,7 +230,7 @@ final class AppKernelFactory
 
 The kernel boots lazily — the very first `handle()` call calls `boot()->configure()` if not already booted, so the factory does not need to call these explicitly.
 
-## 5. The Runtime — `public/index.php`
+## 6. The Runtime — `public/index.php`
 
 The runtime is `Waffle\Commons\Runtime\WaffleRuntime`. Its public API is:
 
@@ -195,9 +273,10 @@ Under FrankenPHP worker mode, `loop()`:
 
 Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the handler runs once and exits.
 
-## 6. What's next
+## 7. What's next
 
-- Add real validation: see [How-To: Routing](../how-to/routing.md) for `#[Argument]` parameter injection.
+- Validate input natively: §4 above shows `#[Dto]` + Property Hooks; [How-To: Error Handling](../how-to/error-handling.md) covers how a hook rejection becomes an RFC 7807 `422`.
+- Route a gateway catch-all: [How-To: Routing](../how-to/routing.md) documents the `priority` parameter and `{path:.*}` multi-segment matching used by the EcoShield gateway pattern.
 - Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
 - Hook into the lifecycle: see [How-To: Events](../how-to/events.md) for `RequestReceivedEvent`, `ResponseGeneratedEvent`, `TerminateEvent`.
 
