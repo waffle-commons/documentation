@@ -1,6 +1,6 @@
 # Cache Reference (`waffle-commons/cache`)
 
-> **Release:** `v0.1.0-beta0`
+> **Release:** `v0.1.0-beta1`
 > **PSR Compliance:** PSR-6 (`Psr\Cache\CacheItemPoolInterface`), PSR-16 (`Psr\SimpleCache\CacheInterface`)
 
 PSR-6 + PSR-16 cache implementation tuned for FrankenPHP worker mode. Every adapter is stateless across requests, fail-secure, and zero-baseline under Mago.

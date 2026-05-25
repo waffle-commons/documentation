@@ -1,6 +1,6 @@
 # How-To: Error Handling
 
-> **Beta 0** — Waffle ships a PSR-15 `ErrorHandlerMiddleware` paired with an RFC 7807 ("Problem Details for HTTP APIs") JSON renderer.
+> **Beta-1** — Waffle ships a PSR-15 `ErrorHandlerMiddleware` paired with an RFC 7807 ("Problem Details for HTTP APIs") JSON renderer.
 
 ## 1. Automatic handling
 
@@ -100,6 +100,46 @@ The renderer produces:
 ```
 
 The `field` key is added automatically when the exception implements `ValidationExceptionInterface` and `getField()` returns non-null (RFC-011).
+
+### DTO Property Hook failures (Beta-1 Phase 3)
+
+When a controller parameter is typed with a `#[Dto]`-marked class, `ControllerArgumentResolver` hydrates it from the parsed PSR-7 body and calls the constructor. Two layers turn bad input into a unified `Waffle\Exception\ValidationException` (422) before the middleware pipeline ever sees it:
+
+**1. Type pre-validation (before construction).** Each body value is checked against the constructor parameter's declared type by `assertAssignable()` — scalars (`int`, `float`, `string`, `bool`, `array`), unions, and nullability. A mismatch (e.g. the body sends a string where the DTO declares `int $age`) becomes a field-level `422` carrying the offending `field` and **no** `previous` chain. This is why a native `\TypeError` can never be thrown by construction — the framework deliberately never catches `\Error` subclasses.
+
+**2. Property Hook validation (during construction).** Validation lives **inside the DTO's PHP 8.5 Property Hooks** — there is no external validator. Whatever a hook throws once types already line up is translated:
+
+| Hook throws | Resolver outcome |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface` (typed) | Bubbles verbatim — `field` is preserved. |
+| `\InvalidArgumentException` (standard PHP) | Wrapped as `ValidationException(422)`, `field: null`, `previous` chained. |
+
+Because both layers resolve to a `ValidationException`, the `JsonErrorRenderer` mapping above applies uniformly: the client always gets a clean `422` RFC 7807 payload — with `field` on a type mismatch or a typed hook rejection, without `field` for a plain `\InvalidArgumentException`.
+
+```php
+use Waffle\Commons\Contracts\Attribute\Dto;
+use Waffle\Exception\ValidationException;
+
+#[Dto]
+final class CreateUserDto
+{
+    public string $email {
+        set(string $value) {
+            if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                // Throwing a typed ValidationException preserves the `field`
+                // slot in the rendered 422 payload.
+                throw new ValidationException(message: 'Invalid email.', field: 'email');
+            }
+            $this->email = strtolower($value);
+        }
+    }
+
+    public function __construct(string $email)
+    {
+        $this->email = $email;
+    }
+}
+```
 
 ## 4. Customizing the renderer
 

@@ -1,6 +1,6 @@
 # Runtime Reference (`waffle-commons/runtime`)
 
-> **Release:** `v0.1.0-beta0`
+> **Release:** `v0.1.0-beta1`
 
 The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
 
@@ -27,6 +27,8 @@ final class WaffleRuntime implements RuntimeInterface
 ```
 
 The runtime contains **no concrete framework dependencies** beyond `GlobalsFactory` and `ResponseEmitter` (which themselves depend only on the http and contracts packages).
+
+> **STAB-01 (Beta-1):** the application-side `AppKernelFactory` no longer holds a `public static GlobalsFactory $globalsFactory` — that static persisted across worker requests and made cross-request contamination possible. `WaffleRuntime` already defaults to creating its own per-process `GlobalsFactory` when none is passed, so `new WaffleRuntime()` is the canonical call from `public/index.php`.
 
 ## `loop()` semantics
 
