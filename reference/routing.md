@@ -36,7 +36,7 @@ final readonly class Route
 | Parameter | Type | Default | Purpose |
 | :--- | :--- | :--- | :--- |
 | `path` | `string` | (required) | URL pattern. Use `{name}` for placeholders, `{name:regex}` for a constrained placeholder, and `{name:.*}` for a multi-segment catch-all — captured values land in `$request->getAttribute('_route_params')`. |
-| `methods` | `array<string>` | `['GET']` | Allowed HTTP methods (e.g. `['GET', 'POST']`). If empty (`[]`), the route accepts any HTTP method. Case-insensitive matching is supported. |
+| `methods` | `array<string>` | `['GET']` | Allowed HTTP methods (e.g. `['GET', 'POST']`). If empty (`[]`), the route accepts any HTTP method. Matching is case-insensitive, and methods are upper-cased + de-duplicated at discovery. A `GET` route also answers `HEAD` (RFC 7231 §4.3.2), and `OPTIONS` is auto-served — see [HTTP Method Filtering](#http-method-filtering--route-overloading). |
 | `name` | `?string` | `null` | Unique route name. Used for debugging and the `route:list` console command. |
 | `arguments` | `?array<mixed>` | `null` | Container-resolved argument injection (see below). |
 | `priority` | `int` | `0` | Match order. Routes are sorted by **descending** priority at boot; higher matches first, negative values (e.g. `-1000`) run last as catch-all fallbacks. |
@@ -162,18 +162,20 @@ final class GatewayController
 
 ## HTTP Method Filtering & Route Overloading
 
-Waffle supports strict HTTP method filtering and route overloading. This allows multiple controller methods to handle the exact same URL path, provided they handle different HTTP methods.
+Waffle supports strict, RFC 7231-aware HTTP method filtering and route overloading: several controller methods may share the exact same URL path as long as they declare different HTTP methods (e.g. `GET /users` and `POST /users`).
 
-### Double-Pass Matching Algorithm
-The `Router::matchRequest()` method implements a double-pass matching flow:
-1. **First Pass (Exact Match):** The router matches both the request URL path and the requested HTTP method (case-insensitive against `$route->methods`). If a match is found, the route is immediately returned.
-2. **Second Pass (Decision):**
-   - If no route matches the URL path, the router returns `null` (bubbles up as a `404 RouteNotFoundException`).
-   - If one or more routes match the URL path but none matches the requested HTTP method, the router aggregates all unique allowed methods across these path-matching routes and throws a `MethodNotAllowedException` (HTTP `405`).
+### Matching with method awareness
+`Router::matchRequest()` scans the priority-sorted table once, then decides:
 
-### Allow Header Injection
-When a `MethodNotAllowedException` is thrown, the pipeline lets the exception bubble up to the global `ErrorHandlerMiddleware`.
-The `JsonErrorRenderer` catches the exception and automatically injects the standardized RFC 7231 `Allow` header into the response (e.g. `Allow: GET, POST`), containing the comma-separated list of allowed methods for the matched path, and renders a standardized RFC 7807 `405 Method Not Allowed` JSON response.
+1. **Path + method match.** For every route whose compiled PCRE matches the URI, the requested method is compared (case-insensitively) against the route's `methods`. A route with an empty `methods` array accepts any method. Per RFC 7231 §4.3.2, a `HEAD` request also matches a route that allows `GET` (the controller runs; stripping the body is the response emitter's job). The first method match wins and is returned as a `MatchedRoute`.
+2. **No path match → `null`.** Bubbles up as a `404` `RouteNotFoundException`.
+3. **Path match but no method match → `405`.** The router throws `MethodNotAllowedException`. Its allowed-methods list is built from **every** path-matching candidate: upper-cased, de-duplicated, augmented with the verbs the framework auto-serves (`HEAD` whenever `GET` is allowed, and `OPTIONS` always), then **sorted alphabetically** for a deterministic response. A `GET`+`POST` path therefore advertises `Allow: GET, HEAD, OPTIONS, POST`.
+
+### OPTIONS preflight (auto-answered)
+When `CoreRoutingMiddleware` is constructed with a PSR-17 `ResponseFactoryInterface` (the default app wiring), an `OPTIONS` request to a **known** path that declares no explicit `OPTIONS` handler is answered directly with `204 No Content` + the `Allow` header — short-circuiting the 405 path *before* it is logged as an exception. A route that explicitly lists `OPTIONS` still runs its controller. Without a response factory, `OPTIONS` falls back to the normal `405`.
+
+### Allow header injection (405 path)
+A genuine `405` (a non-OPTIONS method mismatch) bubbles to the global `ErrorHandlerMiddleware`. `JsonErrorRenderer` reads `MethodNotAllowedException::getAllowedMethods()`, injects the RFC 7231 `Allow` header (e.g. `Allow: GET, HEAD, OPTIONS, POST`; omitted only if the list is empty), and renders a standardized RFC 7807 `405 Method Not Allowed` JSON response.
 
 ## Components
 

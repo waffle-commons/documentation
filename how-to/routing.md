@@ -129,13 +129,14 @@ final class ArticleController extends BaseController
 }
 ```
 
-### Double-Pass Matching & RFC 7231 / RFC 7807 Rejections
+### Method matching, HEAD, OPTIONS & RFC 7231 / RFC 7807 Rejections
 When a request is made:
-1. **Pass 1:** Waffle checks for a route that matches both the path and the requested HTTP method (case-insensitively). If found, it dispatches immediately.
-2. **Pass 2:** If the path matches but no route accepts the requested HTTP method, the system automatically:
-   - Aggregates all allowed HTTP methods for that path.
+1. **Match:** Waffle looks for a route matching both the path and the requested HTTP method (case-insensitively). A `HEAD` request matches a `GET` route (RFC 7231 §4.3.2). If found, it dispatches immediately.
+2. **`OPTIONS` preflight:** an `OPTIONS` request to a known path with no explicit `OPTIONS` handler is auto-answered with `204 No Content` + the `Allow` header (when `CoreRoutingMiddleware` is wired with a PSR-17 response factory — the default).
+3. **`405` rejection:** if the path matches but no route accepts the (non-OPTIONS) method, the system automatically:
+   - Merges the allowed methods across every path-matching route, then augments them — `HEAD` is added when `GET` is allowed, `OPTIONS` is always added — de-duplicates, and **sorts alphabetically**.
    - Throws a `MethodNotAllowedException` (HTTP `405`).
-   - Injects the RFC 7231-compliant `Allow` header (e.g. `Allow: GET, POST`) into the response.
+   - Injects the RFC 7231-compliant `Allow` header (e.g. `Allow: GET, HEAD, OPTIONS, POST`) into the response.
    - Renders a clean, RFC 7807-compliant `405 Method Not Allowed` JSON response.
 
 
