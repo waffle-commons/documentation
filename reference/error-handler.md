@@ -1,6 +1,6 @@
 # Error Handler Reference (`waffle-commons/error-handler`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2`
 > **PSR Compliance:** PSR-15 (`MiddlewareInterface`), produces RFC 7807 ("Problem Details for HTTP APIs") responses.
 
 RFC 7807 JSON error rendering plus the PSR-15 middleware that ties exceptions to it. The outermost layer of the canonical pipeline — it catches every `Throwable` thrown downstream and converts it into a structured, security-aware response.

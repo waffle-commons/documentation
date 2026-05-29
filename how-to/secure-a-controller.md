@@ -69,7 +69,7 @@ For endpoints that genuinely require no authorization (health probes, login form
 
 ```php
 use Waffle\Commons\Contracts\Security\Attribute\PublicAccess;
-use Waffle\Commons\Routing\Attribute\Route;
+use Waffle\Commons\Contracts\Routing\Attribute\Route;
 
 final class HealthController
 {

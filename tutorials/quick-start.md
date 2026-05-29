@@ -1,4 +1,4 @@
-# Quick Start Guide (`v0.1.0-beta1`)
+# Quick Start Guide (`v0.1.0-beta2`)
 
 Welcome to the Waffle Framework. This guide walks you through scaffolding a new project from the `waffle-commons/skeleton` template, writing your first controller, and understanding how the Kernel + Runtime fit together.
 
@@ -32,7 +32,7 @@ namespace App\Controller;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Waffle\Commons\Routing\Attribute\Route;
+use Waffle\Commons\Contracts\Routing\Attribute\Route;
 use Waffle\Core\BaseController;
 
 final class HelloController extends BaseController
@@ -72,8 +72,8 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
-use InvalidArgumentException;
 use Waffle\Commons\Contracts\Attribute\Dto;
+use Waffle\Exception\ValidationException;
 
 #[Dto]
 final class HelloInput
@@ -88,7 +88,13 @@ final class HelloInput
                 $clean = trim($value);
 
                 if ($clean === '' || preg_match('/^\p{L}+$/u', $clean) !== 1) {
-                    throw new InvalidArgumentException('Field "name" must be a non-empty, alphabetic string.');
+                    // ValidationException implements the
+                    // ValidationExceptionInterface marker, so JsonErrorRenderer
+                    // maps this to RFC 7807 HTTP 422 with `field: "name"`.
+                    throw new ValidationException(
+                        message: 'Field "name" must be a non-empty, alphabetic string.',
+                        field: 'name',
+                    );
                 }
 
                 $this->name = $clean;
@@ -155,7 +161,7 @@ The PSR-3 logger is passed to the constructor (default `NullLogger`):
 public function __construct(protected LoggerInterface $logger = new NullLogger())
 ```
 
-Sketch of a factory (Beta-1 wiring — CSRF subsystem wired by default):
+Sketch of a factory (Beta-2 wiring — CSRF subsystem inherited from Beta-1; the `OPTIONS` preflight auto-answer is enabled by passing the PSR-17 response factory to `CoreRoutingMiddleware`):
 
 ```php
 use Waffle\Kernel;
@@ -199,17 +205,21 @@ final class AppKernelFactory
             CsrfTokenManagerInterface::class => $csrfTokenManager,
         ]);
 
-        $renderer = new JsonErrorRenderer(new ResponseFactory(), debug: $debug);
+        $responseFactory = new ResponseFactory();
+        $renderer = new JsonErrorRenderer($responseFactory, debug: $debug);
         $router   = /* build via RouteDiscoverer over waffle.paths.controllers */;
 
-        // Canonical Beta-1 order:
+        // Canonical order (unchanged since Beta-1):
         // ErrorHandler → TrustedHost → AnonymousSession → Routing → Csrf →
         // Security → SecureHeaders → Dispatcher.
+        // Beta-2: CoreRoutingMiddleware receives the PSR-17 $responseFactory, so an
+        // OPTIONS request to a known path is auto-answered with `204 No Content` +
+        // an `Allow` header instead of dispatching a controller.
         $stack = (new MiddlewareStack())
             ->add(new ErrorHandlerMiddleware($renderer, $logger))
             ->add(new TrustedHostMiddleware($config->getArray('waffle.trusted_hosts', []) ?? []))
             ->add(new AnonymousSessionMiddleware())
-            ->add(new CoreRoutingMiddleware($router))
+            ->add(new CoreRoutingMiddleware($router, $responseFactory))
             ->add(new CsrfMiddleware($csrfTokenManager))
             ->add(new SecurityMiddleware(new Security($config), $logger))
             ->add(new SecureHeadersMiddleware());
@@ -280,4 +290,4 @@ Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the han
 - Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
 - Hook into the lifecycle: see [How-To: Events](../how-to/events.md) for `RequestReceivedEvent`, `ResponseGeneratedEvent`, `TerminateEvent`.
 
-You now have a working Beta-1 Waffle application with full PSR-7/15/17 plumbing, Mago Zero-Debt under `composer mago`, fail-closed ABAC, stateless HMAC CSRF, and worker-mode safe runtime.
+You now have a working Beta-2 Waffle application with full PSR-7/15/17 plumbing, RFC 7231 method handling (typed `405` + deterministic `Allow` header + `OPTIONS` preflight), Mago Zero-Debt under `composer mago`, fail-closed ABAC, stateless HMAC CSRF, and worker-mode safe runtime.

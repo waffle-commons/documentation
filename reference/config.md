@@ -1,6 +1,6 @@
 # Config Reference (`waffle-commons/config`)
 
-> **Release:** `v0.1.0-beta1` *(Phase 0 hardening: no process-env mutation)*
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *Beta-1 hardening retained: no process-env mutation*
 > **Requires:** `ext-yaml` (the native PECL YAML extension)
 
 Loads application configuration from YAML files using the native `ext-yaml` extension with `yaml.decode_php = 0` (no PHP-deserialisation gadgets). Environment overlays merge via `array_replace_recursive`; `%env(VAR_NAME)%` placeholders are resolved at load time against a **read-only env registry injected through the constructor** — never against `getenv()` or `$_ENV` directly.

@@ -1,6 +1,6 @@
 # Contracts Reference (`waffle-commons/contracts`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2`
 
 `waffle-commons/contracts` is the root package of the Waffle ecosystem. Every other component depends only on the contracts package plus its own declared PSR dependencies. The package contains interfaces, marker attributes, enums, exception interfaces, and ecosystem-wide typed constants — **no business logic**.
 

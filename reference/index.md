@@ -1,6 +1,6 @@
-# Waffle Components Reference (Beta-1)
+# Waffle Components Reference (Beta-2)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem at the `v0.1.0-beta1` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem at the `v0.1.0-beta2` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |
@@ -21,8 +21,18 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
 | **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
 
-## Beta-1 contracts surface
+## Developer tooling
 
-Beta-1 made a **single intentional breaking change** to the contracts surface: `CsrfTokenManagerInterface::issue/validate/refresh` now take a `$sessionId` argument so HMAC tokens bind to the per-browser `WAFFLE_SID`. It also adds new symbols — `#[PublicAccess]` attribute, the concrete `RouteNotFoundException`, and CSRF binding constants (`SESSION_COOKIE_NAME`, `SESSION_ID_BYTES`, `SESSION_REQUEST_ATTRIBUTE`, `SESSION_COOKIE_MAX_AGE`).
+| Tool | Description | Reference |
+| :--- | :--- | :--- |
+| **`wfl`** | Host-side developer CLI (`bin/wfl`) wrapping Docker / Composer / Mago / PHPUnit: lifecycle, per-component `mago` / `tests`, local component linking (`wfl link <consumer> <provider>`), and PHP debug/bench profile switching. | [wfl.md](wfl.md) |
+
+## Beta-2 contracts surface additions
+
+Beta-2 adds the typed `405 Method Not Allowed` contract: `MethodNotAllowedException` (concrete `final` class) and its `MethodNotAllowedExceptionInterface` marker, the `Route` attribute's new `methods` parameter (relocated to `contracts`), and the `METHOD_GET` / `METHOD_POST` / … HTTP-method string constants on `Waffle\Commons\Contracts\Routing\Constant`. See the [contracts CHANGELOG](../../contracts/CHANGELOG.md) for the full Beta-2 delta and the umbrella [CHANGELOG](../../CHANGELOG.md) for the cross-component HTTP-correctness narrative.
+
+## Beta-1 contracts foundations
+
+Beta-1 made a **single intentional breaking change** to the contracts surface: `CsrfTokenManagerInterface::issue/validate/refresh` take a `$sessionId` argument so HMAC tokens bind to the per-browser `WAFFLE_SID`. It also added the `#[PublicAccess]` attribute, the concrete `RouteNotFoundException`, and CSRF binding constants (`SESSION_COOKIE_NAME`, `SESSION_ID_BYTES`, `SESSION_REQUEST_ATTRIBUTE`, `SESSION_COOKIE_MAX_AGE`).
 
 Every interface is still named `*Interface`, every exception ends in `*Exception`, every enum lives in an `Enum\` namespace. These conventions are enforced by `mago guard` in every component's `mago.toml`. See [contracts.md](contracts.md) for the authoritative type listing and [attributes-public-access.md](attributes-public-access.md) for the new attribute.

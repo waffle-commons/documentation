@@ -4,7 +4,7 @@ Waffle uses PHP 8 Attributes to define routes directly in your controller classe
 
 ## Defining a Route
 
-Use the `#[Route]` attribute from `Waffle\Commons\Routing\Attribute` to map a URL path to a controller method.
+Use the `#[Route]` attribute from `Waffle\Commons\Contracts\Routing\Attribute` to map a URL path to a controller method. (The attribute was relocated to `contracts` in Beta-2; the old `Waffle\Commons\Routing\Attribute\Route` no longer exists.)
 
 ```php
 namespace App\Controller;

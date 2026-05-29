@@ -1,6 +1,6 @@
 # HTTP Client Reference (`waffle-commons/http-client`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **PSR Compliance:** PSR-18 (`Psr\Http\Client\ClientInterface`), consumes PSR-7 messages, PSR-17 factories
 
 A high-performance PSR-18 HTTP client tuned for FrankenPHP resident-worker proxying. Holds a persistent `\CurlHandle` and `\CurlMultiHandle`, reused via `curl_reset()` across every `sendRequest()` so libcurl's DNS cache and keep-alive pool stay warm. The transfer is driven through the multi interface (`curl_multi_exec` + `curl_multi_select`) rather than the blocking `curl_exec()`, so the worker parks on a socket-level wait instead of busy-spinning. Bodies stream in 8 KiB chunks **in both directions** — request bodies are pulled from the PSR-7 request stream, response bodies pushed into a PSR-7 stream — so neither is materialised whole in worker memory.
