@@ -1,6 +1,6 @@
 # Fail-Closed ABAC
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *Architectural choice retained from Beta-1*
 > **Diátaxis quadrant:** Explanation
 > **Tracks:** SEC-02
 

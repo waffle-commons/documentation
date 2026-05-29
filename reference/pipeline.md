@@ -1,6 +1,6 @@
 # Pipeline Reference (`waffle-commons/pipeline`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2`
 > **PSR Compliance:** PSR-15 (`Psr\Http\Server\MiddlewareInterface`, `RequestHandlerInterface`)
 
 The PSR-15 middleware stack that runs every request through the kernel. The stack locks itself the moment it is converted to a handler, so middleware order cannot be tampered with mid-request.
@@ -37,6 +37,16 @@ This guarantees that middleware order cannot change while a request is in flight
 
 ### `Waffle\Commons\Pipeline\CoreRoutingMiddleware`
 
+```php
+final readonly class CoreRoutingMiddleware implements MiddlewareInterface
+{
+    public function __construct(
+        private RouterInterface $router,
+        private ?ResponseFactoryInterface $responseFactory = null,  // PSR-17; enables auto-OPTIONS
+    );
+}
+```
+
 Routes the request by calling `RouterInterface::matchRequest()` (which returns the immutable `MatchedRoute` DTO since Beta-1 — see [`reference/routing`](routing.md#matchedroute-dto)), then exposes the result on the request attributes:
 
 - `_classname` — FQCN of the resolved controller class.
@@ -47,6 +57,8 @@ Routes the request by calling `RouterInterface::matchRequest()` (which returns t
 - `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the URI.
 
 When no route matches, raises `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (the concrete `final` class added in Beta-1, which implements `RouteNotFoundExceptionInterface` and is rendered as RFC 7807 `404` by `JsonErrorRenderer`). Beta-0 raised a generic `RuntimeException` here and produced a `500`; that mapping has been fixed.
+
+**OPTIONS preflight.** When constructed with a PSR-17 `$responseFactory` (the default app wiring passes one), an `OPTIONS` request to a known path that declares no explicit `OPTIONS` handler is answered with `204 No Content` + the `Allow` header the router computed — intercepting the `MethodNotAllowedException` here so a routine preflight never reaches the logger. A real method mismatch (any non-OPTIONS verb), or OPTIONS when no factory is wired, re-throws the `405` for `ErrorHandlerMiddleware` to render. See [routing → HTTP Method Filtering](routing.md#http-method-filtering--route-overloading).
 
 ### `Waffle\Commons\Pipeline\Middleware\TrustedHostMiddleware`
 
@@ -73,7 +85,7 @@ $stack = (new MiddlewareStack())
     ->add(new ErrorHandlerMiddleware($renderer, $logger))               // 1. outermost (catches everything)
     ->add(new TrustedHostMiddleware($config->getArray('waffle.trusted_hosts', []) ?? []))
     ->add(new AnonymousSessionMiddleware())                             // 3. issues WAFFLE_SID cookie + _anon_sid attr
-    ->add(new CoreRoutingMiddleware($router))                           // 4. resolves _classname / _method
+    ->add(new CoreRoutingMiddleware($router, $responseFactory))         // 4. resolves _classname / _method; auto-answers OPTIONS
     ->add(new CsrfMiddleware($csrfTokenManager))                        // 5. validates #[RequiresCsrfToken] using _anon_sid
     ->add(new SecurityMiddleware($secureContainer, $logger))            // 6. fail-closed ABAC analysis
     ->add(new SecureHeadersMiddleware())                                // 7. innermost — adds defensive response headers

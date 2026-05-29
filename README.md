@@ -8,11 +8,11 @@
 
 > [!WARNING]
 > **BETA SOFTWARE**
-> This version (`v0.1.0-beta1`) is the security-hardening release on top of Beta 0. It lands the MUST-HAVE items from the Beta-0 audit: fail-closed ABAC with a new `#[PublicAccess]` opt-out, stateless HMAC CSRF tokens bound to a per-browser `WAFFLE_SID` cookie, an SSRF allowlist on the HTTP client, removal of the static `GlobalsFactory` for FrankenPHP safety, and a proper typed `RouteNotFoundException` for 404 mapping. The `CsrfTokenManagerInterface` signature changed — see [contracts.md](reference/contracts.md). Do not use in critical production environments without an independent security audit.
+> This version (`v0.1.0-beta2`) is the HTTP-correctness release on top of Beta-1's security-hardening wave. Beta-2 lands the typed `405 Method Not Allowed` contract end-to-end: `MethodNotAllowedException` in `contracts`, RFC 7231 `Allow` header emission in `error-handler`, `OPTIONS` preflight auto-answer (`204` + `Allow`) in `pipeline`'s `CoreRoutingMiddleware`, and method overloading + `HEAD ⇒ GET` fallback + deterministic `Allow` header + worker-safe PCRE pattern cache in `routing`. The Beta-1 security foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, SSRF allowlist, typed `RouteNotFoundException`) remain in place — Beta-2 is purely additive at the framework-component level. Do not use in critical production environments without an independent security audit.
 
-## 🎯 The Beta-1 contract
+## 🎯 The Beta-2 contract
 
-Waffle Beta-1 is built around two non-negotiable principles:
+Waffle Beta-2 is built around two non-negotiable principles:
 
 - **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes**. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
 - **🐘 PHP 8.5 Strict.** Property Hooks for DTO validation, Asymmetric Visibility (`public private(set)`) for safe state exposure, typed constants for ecosystem-wide identifiers, `final readonly` for value objects, and `#[\Override]` on every interface implementation. The `mixed` type is forbidden in component surfaces (PSR-mandated exceptions aside).
@@ -42,10 +42,12 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Handle Errors**](how-to/error-handling.md): RFC 7807 JSON responses.
 - [**Use Events**](how-to/events.md): PSR-14, `#[AsEventListener]`, lifecycle events.
 - [**Routing**](how-to/routing.md): `#[Route]` and `#[Argument]`.
+- [**Work on Multiple Components Locally**](how-to/local-development-workflow.md): `wfl link` / `unlink` / `debug` / `bench`.
 
 ### Need API Details?
 - [**Security**](reference/security.md)
 - [**Routing**](reference/routing.md)
+- [**`wfl` Developer CLI**](reference/wfl.md)
 - [**Index of Components**](reference/index.md)
 
 ### Under the Hood
@@ -56,4 +58,4 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ---
 
-*Verified for Waffle Framework v0.1.0-beta1 running on PHP 8.5.5+.*
+*Verified for Waffle Framework v0.1.0-beta2 running on PHP 8.5.5+.*

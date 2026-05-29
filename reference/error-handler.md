@@ -1,6 +1,6 @@
 # Error Handler Reference (`waffle-commons/error-handler`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2`
 > **PSR Compliance:** PSR-15 (`MiddlewareInterface`), produces RFC 7807 ("Problem Details for HTTP APIs") responses.
 
 RFC 7807 JSON error rendering plus the PSR-15 middleware that ties exceptions to it. The outermost layer of the canonical pipeline — it catches every `Throwable` thrown downstream and converts it into a structured, security-aware response.
@@ -28,10 +28,11 @@ new JsonErrorRenderer(
 `JsonErrorRenderer::determineStatusCode()` resolves in this order:
 
 1. `ValidationExceptionInterface` → **422** (precedence override — the field-level error always wins regardless of the exception's `getCode()`).
-2. Exception `code` in range `[400, 599]` → use it verbatim. (`SecurityException(403)`, `InvalidCsrfTokenException(403)`, …)
+2. Exception `code` in range `[400, 599]` → use it verbatim. (`SecurityException(403)`, `InvalidCsrfTokenException(403)`, `MethodNotAllowedException(405)`, …)
 3. `RouteNotFoundExceptionInterface` → **404**.
-4. `InvalidArgumentException` → **400**.
-5. Anything else → **500**.
+4. `MethodNotAllowedExceptionInterface` → **405**.
+5. `InvalidArgumentException` → **400**.
+6. Anything else → **500**.
 
 ## Response body shape (RFC 7807)
 
@@ -47,6 +48,7 @@ new JsonErrorRenderer(
 ```
 
 - `Content-Type: application/problem+json` per RFC 7807.
+- For a `MethodNotAllowedExceptionInterface`, an RFC 7231 `Allow` header is added listing the allowed methods (e.g. `Allow: GET, HEAD, OPTIONS, POST`); it is omitted only when the list is empty.
 - `field` is added only when the exception implements `ValidationExceptionInterface` and returns a non-null `getField()`.
 - In production (`$debug === false`), responses with status ≥ 500 have their `detail` replaced by `"An internal server error occurred."` to avoid leaking internals.
 - In debug, the body additionally carries `trace` (array of frames), `file`, `line`.

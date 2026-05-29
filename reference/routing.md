@@ -1,29 +1,31 @@
 # Routing Reference (`waffle-commons/routing`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2`
 
 Attribute-driven router. Routes live next to the controller code via the `#[Route]` attribute; the `RouteDiscoverer` scans the configured controller directory at boot time and the compiled table is cached.
 
 ## `#[Route]` attribute — exact signature
 
-From `src/Attribute/Route.php`:
+From `Waffle\Commons\Contracts\Routing\Attribute\Route` (in contracts):
 
 ```php
-namespace Waffle\Commons\Routing\Attribute;
+namespace Waffle\Commons\Contracts\Routing\Attribute;
 
 use Attribute;
 
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD)]
-final class Route
+final readonly class Route
 {
     /**
-     * @param array<Argument>|null $arguments
-     * @param int                  $priority Higher matches first. Use negative values
-     *                                       (e.g. `-1000`) for catch-all routes that
-     *                                       must be evaluated last. Defaults to `0`.
+     * @param string $path The route path or pattern.
+     * @param array<string> $methods Allowed HTTP methods (e.g. ['GET', 'POST']). If empty, accepts all.
+     * @param string|null $name The unique name of the route.
+     * @param array<mixed>|null $arguments Metadata about arguments.
+     * @param int $priority Match priority of the route (higher evaluated first).
      */
     public function __construct(
         public string $path,
+        public array $methods = ['GET'],
         public ?string $name = null,
         public ?array $arguments = null,
         public int $priority = 0,
@@ -34,8 +36,9 @@ final class Route
 | Parameter | Type | Default | Purpose |
 | :--- | :--- | :--- | :--- |
 | `path` | `string` | (required) | URL pattern. Use `{name}` for placeholders, `{name:regex}` for a constrained placeholder, and `{name:.*}` for a multi-segment catch-all — captured values land in `$request->getAttribute('_route_params')`. |
+| `methods` | `array<string>` | `['GET']` | Allowed HTTP methods (e.g. `['GET', 'POST']`). If empty (`[]`), the route accepts any HTTP method. Matching is case-insensitive, and methods are upper-cased + de-duplicated at discovery. A `GET` route also answers `HEAD` (RFC 7231 §4.3.2), and `OPTIONS` is auto-served — see [HTTP Method Filtering](#http-method-filtering--route-overloading). |
 | `name` | `?string` | `null` | Unique route name. Used for debugging and the `route:list` console command. |
-| `arguments` | `?array<Argument>` | `null` | Container-resolved argument injection (see below). |
+| `arguments` | `?array<mixed>` | `null` | Container-resolved argument injection (see below). |
 | `priority` | `int` | `0` | Match order. Routes are sorted by **descending** priority at boot; higher matches first, negative values (e.g. `-1000`) run last as catch-all fallbacks. |
 
 Targets both `TARGET_CLASS` and `TARGET_METHOD`. Class-level `#[Route]` defines a path prefix for every method-level `#[Route]` on that class.
@@ -63,7 +66,7 @@ final class Argument
 Tells the router that the controller's `$paramName` argument should be resolved from the container by FQCN `$classType`. Use this when you want a controller method to receive a service that isn't naturally derivable from the route path:
 
 ```php
-use Waffle\Commons\Routing\Attribute\Route;
+use Waffle\Commons\Contracts\Routing\Attribute\Route;
 use Waffle\Commons\Routing\Attribute\Argument;
 
 #[Route(
@@ -109,6 +112,7 @@ final readonly class MatchedRoute
         public string $name,        // route name from #[Route(name: ...)]
         public array  $params = [], // path parameters extracted for this request
         public int    $priority = 0, // higher matches first; -1000 = catch-all
+        public array  $methods = [], // HTTP methods allowed for this route
     ) {}
 
     public function withParams(array $params): self;
@@ -155,6 +159,23 @@ final class GatewayController
 **Method-level wins** — if a method's `#[Route]` declares a non-zero `priority`, it overrides the class-level value. If only the class declares one, every method inherits it. This mirrors how the `path` is already composed (class prefix + method suffix).
 
 **Multi-segment catch-all** — the `{name:.*}` form matches across `/` boundaries, so a single gateway route can absorb arbitrarily deep URIs. Combine it with a negative `priority` so it only fires after every specific route has been tried.
+
+## HTTP Method Filtering & Route Overloading
+
+Waffle supports strict, RFC 7231-aware HTTP method filtering and route overloading: several controller methods may share the exact same URL path as long as they declare different HTTP methods (e.g. `GET /users` and `POST /users`).
+
+### Matching with method awareness
+`Router::matchRequest()` scans the priority-sorted table once, then decides:
+
+1. **Path + method match.** For every route whose compiled PCRE matches the URI, the requested method is compared (case-insensitively) against the route's `methods`. A route with an empty `methods` array accepts any method. Per RFC 7231 §4.3.2, a `HEAD` request also matches a route that allows `GET` (the controller runs; stripping the body is the response emitter's job). The first method match wins and is returned as a `MatchedRoute`.
+2. **No path match → `null`.** Bubbles up as a `404` `RouteNotFoundException`.
+3. **Path match but no method match → `405`.** The router throws `MethodNotAllowedException`. Its allowed-methods list is built from **every** path-matching candidate: upper-cased, de-duplicated, augmented with the verbs the framework auto-serves (`HEAD` whenever `GET` is allowed, and `OPTIONS` always), then **sorted alphabetically** for a deterministic response. A `GET`+`POST` path therefore advertises `Allow: GET, HEAD, OPTIONS, POST`.
+
+### OPTIONS preflight (auto-answered)
+When `CoreRoutingMiddleware` is constructed with a PSR-17 `ResponseFactoryInterface` (the default app wiring), an `OPTIONS` request to a **known** path that declares no explicit `OPTIONS` handler is answered directly with `204 No Content` + the `Allow` header — short-circuiting the 405 path *before* it is logged as an exception. A route that explicitly lists `OPTIONS` still runs its controller. Without a response factory, `OPTIONS` falls back to the normal `405`.
+
+### Allow header injection (405 path)
+A genuine `405` (a non-OPTIONS method mismatch) bubbles to the global `ErrorHandlerMiddleware`. `JsonErrorRenderer` reads `MethodNotAllowedException::getAllowedMethods()`, injects the RFC 7231 `Allow` header (e.g. `Allow: GET, HEAD, OPTIONS, POST`; omitted only if the list is empty), and renders a standardized RFC 7807 `405 Method Not Allowed` JSON response.
 
 ## Components
 

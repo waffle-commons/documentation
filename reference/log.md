@@ -1,6 +1,6 @@
 # Log Reference (`waffle-commons/log`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **PSR Compliance:** PSR-3 (`Psr\Log\LoggerInterface`, `AbstractLogger`)
 
 PSR-3 logger that emits JSON-formatted records to a stream. Optimised for Docker / Kubernetes deployments where logs are collected from `stdout` / `stderr`.

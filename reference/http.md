@@ -1,6 +1,6 @@
 # HTTP Reference (`waffle-commons/http`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **PSR Compliance:** PSR-7 (HTTP Messages), PSR-17 (HTTP Factories)
 
 Strict, immutable PSR-7/17 implementation tuned for FrankenPHP worker mode. No singletons, no superglobal touching outside the explicit `GlobalsFactory`. The `ResponseEmitter` reads response bodies in 8 KiB chunks to keep large payload streaming memory-bounded.

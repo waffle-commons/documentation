@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 

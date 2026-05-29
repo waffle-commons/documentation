@@ -1,6 +1,6 @@
 # Runtime Reference (`waffle-commons/runtime`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 
 The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
 

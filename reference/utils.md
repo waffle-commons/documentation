@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `v0.1.0-beta1`
+> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
