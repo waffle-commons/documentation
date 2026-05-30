@@ -56,6 +56,12 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).
 - [**CSRF: Signed Double-Submit**](explanation/security-csrf-double-submit.md): Stateless HMAC + per-browser binding (Beta-1 / SEC-01).
 
----
+***
 
 *Verified for Waffle Framework v0.1.0-beta2 running on PHP 8.5.5+.*
+
+***
+
+> [![Discord](https://img.shields.io/discord/755288001592033391?color=7289da&label=discord&logo=discord&style=for-the-badge)](https://discord.gg/eKgywnfXr2)<br />
+> *Join the core team and contributors on Discord to shape the future of cloud-native PHP.*
+
