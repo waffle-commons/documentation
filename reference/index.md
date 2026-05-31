@@ -1,6 +1,6 @@
-# Waffle Components Reference (Beta-2)
+# Waffle Components Reference (Beta-3)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem at the `v0.1.0-beta2` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the in-progress `v0.1.0-beta3` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |
@@ -16,7 +16,8 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Event Dispatcher** | `waffle-commons/event-dispatcher` | PSR-14 dispatcher and listener provider; `#[AsEventListener]` discovery. | [event-dispatcher.md](event-dispatcher.md) |
 | **Log** | `waffle-commons/log` | PSR-3 `StreamLogger` (JSON, stdout/stderr), `LogChannel` enum-style constants. | [log.md](log.md) |
 | **Cache** | `waffle-commons/cache` | PSR-6 + PSR-16 adapters: `ArrayCache`, `FileCache`, `RedisCache`, with stampede protection. | [cache.md](cache.md) |
-| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`. | [console.md](console.md) |
+| **Data** | `waffle-commons/data` | Worker-safe persistence (RFC-022): `PDOConnectionPool`, backend-agnostic query AST, SQL/Firestore compilers, property-hook hydrator, `db:migrate` migration runner. | [data.md](data.md) |
+| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `db:migrate`. | [console.md](console.md) |
 | **Config** | `waffle-commons/config` | Native YAML (ext-yaml) configuration loader with strict typing. | [config.md](config.md) |
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
 | **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
@@ -26,6 +27,10 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | Tool | Description | Reference |
 | :--- | :--- | :--- |
 | **`wfl`** | Host-side developer CLI (`bin/wfl`) wrapping Docker / Composer / Mago / PHPUnit: lifecycle, per-component `mago` / `tests`, local component linking (`wfl link <consumer> <provider>`), and PHP debug/bench profile switching. | [wfl.md](wfl.md) |
+
+## Beta-3 data & persistence additions
+
+Beta-3 introduces the **`waffle-commons/data`** component (RFC-022) — a worker-safe, ORM-free persistence layer — and the contracts that support it: `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface`, `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface`, and `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`. The `console` component gains the **`db:migrate`** command — it lives in `console` and depends only on the contracts interface, so no new dependency edge is introduced; the application wires the concrete `MigrationRunner` in its `bin/waffle`. See [data.md](data.md), [How to: Database Migrations](../how-to/database-migrations.md), and the [data CHANGELOG](../../data/CHANGELOG.md).
 
 ## Beta-2 contracts surface additions
 

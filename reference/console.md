@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `v0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; Adds the `db:migrate` command (RFC-022)
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 
@@ -35,8 +35,9 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | `Waffle\Commons\Console\Command\CacheClearCommand` | `cache:clear` | Flushes the configured `CacheInterface` backend (route cache, security tokens). |
 | `Waffle\Commons\Console\Command\RouteListCommand` | `route:list` | Renders the compiled route table. |
 | `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks controllers and prints the resolved access ladder (`#[Rule]` / `#[Voter]`). |
+| `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
 
-All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers.
+All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` depends only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
 
 ## I/O
 

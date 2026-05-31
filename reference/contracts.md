@@ -127,6 +127,18 @@ Extends `Psr\Cache\CacheItemPoolInterface` (PSR-6) for clients that need the ite
 
 Marker interface for adapters that implement probabilistic early-expiration ("stampede protection").
 
+## Data (PDO + migrations, RFC-022)
+
+Added in Beta-3; consumed by the `waffle-commons/data` component.
+
+| Interface | Purpose |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable PDO connections: `acquire(): PDO` (ping-before-dispense, transparent reconnect) and `release(PDO): void`. Implementations also implement `ResettableInterface`. |
+| `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface` | Forward-only SQL migration runner: `run(?Closure $onApplied = null): list<string>` — applies pending migrations in version order, idempotently. |
+| `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface` | Base contract for data-layer failures (`extends Throwable`); `getSqlState(): ?string` exposes the ANSI SQLSTATE when the backend provides one. |
+
+See [data.md](data.md) for the concrete implementations.
+
 ## Event dispatching (PSR-14)
 
 ### `Waffle\Commons\Contracts\EventDispatcher\EventDispatcherInterface`
@@ -286,7 +298,7 @@ interface ResettableInterface
 }
 ```
 
-Implemented by anything that needs per-request reset under FrankenPHP worker mode (Container, internal Kernel state, custom services).
+Implemented by anything that needs per-request reset under FrankenPHP worker mode (Container, internal Kernel state, the data layer's `PDOConnectionPool`, custom services).
 
 ### `Waffle\Commons\Contracts\System\SystemInterface`
 
