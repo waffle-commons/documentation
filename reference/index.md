@@ -27,6 +27,7 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | Tool | Description | Reference |
 | :--- | :--- | :--- |
 | **`wfl`** | Host-side developer CLI (`bin/wfl`) wrapping Docker / Composer / Mago / PHPUnit: lifecycle, per-component `mago` / `tests`, local component linking (`wfl link <consumer> <provider>`), and PHP debug/bench profile switching. | [wfl.md](wfl.md) |
+| **Igor-PHP** | Worker-mode memory-neutrality gate, run as `composer igor` — a static `ΔM = 0` audit (state mutation, incomplete `reset()`, dangerous globals) wired into the resident-state components (`runtime`, `container`, `data`, `security`, …). | [runtime.md](runtime.md) |
 
 ## Beta-3 data & persistence additions
 

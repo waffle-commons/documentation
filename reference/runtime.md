@@ -87,3 +87,45 @@ A kernel passed to `WaffleRuntime::loop()` must:
 - Hold **no per-request mutable state** on the kernel object itself (use the container or request attributes for that).
 
 The framework's `Waffle\Abstract\AbstractKernel` satisfies all three.
+
+## Memory-neutrality gate — Igor-PHP (`ΔM = 0`)
+
+The worker-mode safety contract above is enforced **statically** by **Igor-PHP**, an
+ultra-fast Go linter purpose-built for FrankenPHP worker mode. It is Waffle's primary
+memory-neutrality gate: it parses the AST (it never executes the code) and rejects the
+patterns that break the `ΔM = 0` invariant before they reach a resident worker.
+
+**What it catches**
+
+- **Persistent state mutation** — `static::$prop`, `$this->items[] = …` and similar
+  writes that accumulate in RAM across requests.
+- **Incomplete reset** — a service that implements
+  `Waffle\Commons\Contracts\Service\ResettableInterface` but leaves a mutable property
+  unset in `reset()`, leaking state from request *N* into request *N+1*.
+- **Dangerous global access** — superglobals (`$_GET`, `$_SERVER`, …), `exit`/`die`,
+  and ambient mutations such as `date_default_timezone_set()` that poison the process
+  (forbidden by the statelessness mandate).
+
+> **Symfony note:** Igor's automatic container-service audit targets Symfony projects.
+> Waffle is not Symfony, so that auto-discovery does not apply; Igor still performs its
+> framework-agnostic static mutation / reset / global-access analysis on our source.
+
+**Install (in Docker), like every other gate**
+
+```bash
+docker exec -it -w /waffle-commons/runtime waffle-dev composer require --dev igor-php/igor-php
+```
+
+**Run before pushing** — mandatory for any change to memory-sensitive components
+(`runtime`, `container`, `pipeline`):
+
+```bash
+docker exec -it -w /waffle-commons/runtime waffle-dev composer igor
+# or, locally inside the component root:
+./bin/run-igor.sh
+```
+
+**Zero baselines.** Per the Mago Purge Protocol, Igor findings are fixed, not
+suppressed — do **not** commit an Igor baseline. Configuration lives in
+`runtime/igor.json`; the full install and violation-resolution guide is
+`runtime/igor_local_setup.md`.
