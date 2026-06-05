@@ -274,7 +274,7 @@ final readonly class Dto {}
 
 Plus enums:
 
-- `Waffle\Commons\Contracts\Console\Enum\ExitCode` — `SUCCESS = 0`, `FAILURE = 1`, `USAGE = 2`, …
+- `Waffle\Commons\Contracts\Console\Enum\ExitCode` — `SUCCESS = 0`, `FAILURE = 1`, `USAGE = 64`, `DATA_ERR = 65`, `NO_INPUT = 66`, `NO_PERM = 77`, `CONFIG = 78` (BSD `sysexits(3)`); plus `isSuccess()` / `isFailure()`.
 - `Waffle\Commons\Contracts\Console\Enum\Verbosity` — `QUIET`, `NORMAL`, `VERBOSE`, `VERY_VERBOSE`, `DEBUG`.
 
 ## Runtime
@@ -285,6 +285,14 @@ The contract `WaffleRuntime` implements. Its single non-constructor method is:
 
 ```php
 public function loop(KernelInterface $kernel, int $maxRequests = 500): void;
+```
+
+### `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`
+
+Contract for running an external audit script and streaming its output (consumed by the `igor:audit` console command; concrete `ProcessAuditRunner` lives in `waffle-commons/runtime`). Executes the script without a shell and reports each line to a `Closure`:
+
+```php
+public function run(string $scriptPath, string $workingDirectory, array $arguments, Closure $onLine): int;
 ```
 
 ## System / Service

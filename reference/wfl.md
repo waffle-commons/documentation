@@ -43,6 +43,7 @@ If `~/.local/bin` is not on your `$PATH`, `wfl init` prints a warning telling yo
 | `wfl run [component] <cmd…>` | Run an arbitrary command in a component (if the first arg is an existing component dir) or at the monorepo root otherwise. |
 | `wfl mago [component]` | Run `composer mago` (fmt + lint + analyze + guard) for a component. Defaults to the component inferred from your current directory. |
 | `wfl test [component]` | Run `composer tests` for a component. Defaults to the component inferred from your current directory. |
+| `wfl igor [args…]` | Run the **monorepo-wide** Igor memory-leak / shared-state audit (`igor.sh`) across every component that declares `igor-php/igor-php`. Takes no component argument; forwards all flags verbatim (`--silent`, `--local`, `-c <component>`, `-- <igor args>`). On the host it `docker exec`s each audit into `waffle-dev`; it self-detects local mode when already inside the container. |
 
 When no component is given, `wfl` infers it from your working directory (you must be inside `<repo>/<component>/…`); otherwise it asks you to pass one explicitly.
 

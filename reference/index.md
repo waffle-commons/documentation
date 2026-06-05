@@ -17,7 +17,7 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Log** | `waffle-commons/log` | PSR-3 `StreamLogger` (JSON, stdout/stderr), `LogChannel` enum-style constants. | [log.md](log.md) |
 | **Cache** | `waffle-commons/cache` | PSR-6 + PSR-16 adapters: `ArrayCache`, `FileCache`, `RedisCache`, with stampede protection. | [cache.md](cache.md) |
 | **Data** | `waffle-commons/data` | Worker-safe persistence (RFC-022): `PDOConnectionPool`, backend-agnostic query AST, SQL/Firestore compilers, property-hook hydrator, `db:migrate` migration runner. | [data.md](data.md) |
-| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `db:migrate`. | [console.md](console.md) |
+| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `db:migrate`, `igor:audit`. | [console.md](console.md) |
 | **Config** | `waffle-commons/config` | Native YAML (ext-yaml) configuration loader with strict typing. | [config.md](config.md) |
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
 | **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
@@ -27,7 +27,7 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | Tool | Description | Reference |
 | :--- | :--- | :--- |
 | **`wfl`** | Host-side developer CLI (`bin/wfl`) wrapping Docker / Composer / Mago / PHPUnit: lifecycle, per-component `mago` / `tests`, local component linking (`wfl link <consumer> <provider>`), and PHP debug/bench profile switching. | [wfl.md](wfl.md) |
-| **Igor-PHP** | Worker-mode memory-neutrality gate, run as `composer igor` — a static `ΔM = 0` audit (state mutation, incomplete `reset()`, dangerous globals) wired into the resident-state components (`runtime`, `container`, `data`, `security`, …). | [runtime.md](runtime.md) |
+| **Igor-PHP** | Worker-mode memory-neutrality gate — a static `ΔM = 0` audit (state mutation, incomplete `reset()`, dangerous globals) wired into the resident-state components (`runtime`, `container`, `data`, `security`, …). Run per component as `composer igor`, monorepo-wide as `./igor.sh` / `wfl igor`, or from the app console as `igor:audit` (engine in `runtime`). | [runtime.md](runtime.md) |
 
 ## Beta-3 data & persistence additions
 

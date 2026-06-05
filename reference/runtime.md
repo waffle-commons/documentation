@@ -129,3 +129,75 @@ docker exec -it -w /waffle-commons/runtime waffle-dev composer igor
 suppressed — do **not** commit an Igor baseline. Configuration lives in
 `runtime/igor.json`; the full install and violation-resolution guide is
 `runtime/igor_local_setup.md`.
+
+## `igor:audit` execution engine
+
+The audit is also exposed from the application console as **`igor:audit`** (the thin
+`Waffle\Commons\Console\Command\MemoryAuditCommand`). Per the "every component depends
+only on `waffle-commons/contracts`" rule, the command depends on the contract
+`Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`, while the OS-level execution
+lives here in `runtime` — exactly as `db:migrate` consumes `MigrationRunnerInterface`
+with the concrete in `data`.
+
+```php
+namespace Waffle\Commons\Contracts\Runtime; // contracts/src/Runtime/AuditRunnerInterface.php
+
+interface AuditRunnerInterface
+{
+    /**
+     * @param list<string> $arguments               flags forwarded to the script (e.g. ['--local'])
+     * @param Closure(string $line, bool $isError): void $onLine
+     */
+    public function run(string $scriptPath, string $workingDirectory, array $arguments, Closure $onLine): int;
+}
+```
+
+The concrete adapter runs the script with `proc_open` (no shell — argv array form, so
+none of the lint-banned `exec`/`system`/`shell_exec`/`passthru` helpers are touched) and
+streams stdout/stderr line-by-line as the audit runs:
+
+```php
+namespace Waffle\Commons\Runtime\Audit; // runtime/src/Audit/ProcessAuditRunner.php
+
+readonly class ProcessAuditRunner implements AuditRunnerInterface
+{
+    public const int READ_CHUNK = 8192;          // typed class constants
+    public const int SELECT_TIMEOUT_US = 200_000;
+    public const int EXIT_CANNOT_EXECUTE = 127;
+    // run(): proc_open + non-blocking stream_select line streaming
+}
+```
+
+The argv is modelled by a hooked value object showcasing the PHP 8.5 baseline — a typed
+class constant, a validating `set` property hook (throws a domain `ValidationException`),
+and asymmetric visibility (`public private(set)`). A class with a writable hook cannot be
+`readonly`, so it is a `final class`:
+
+```php
+namespace Waffle\Commons\Runtime\Audit; // runtime/src/Audit/IgorAuditConfig.php
+
+final class IgorAuditConfig
+{
+    public const string SHELL = 'bash';
+
+    public string $scriptPath {
+        set(string $value) {
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                throw new ValidationException('The audit script path must not be empty.', 'scriptPath');
+            }
+            $this->scriptPath = $trimmed;
+        }
+    }
+
+    public private(set) array $arguments; // list<string>, publicly read-only
+
+    /** @return list<string> [SHELL, scriptPath, ...arguments] */
+    public function toCommand(): array;
+}
+```
+
+The application wires it in `bin/waffle`:
+`$app->add(new MemoryAuditCommand(new ProcessAuditRunner(), $repoRoot, $insideContainer));`.
+The monorepo-wide script itself is the root `igor.sh`, also runnable as `wfl igor` — see
+the devops how-to [Run checks across components](../../docs/how-to/run-checks-across-components.md#the-memory-neutrality-gate-igor-php).

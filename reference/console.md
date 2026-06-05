@@ -36,8 +36,30 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | `Waffle\Commons\Console\Command\RouteListCommand` | `route:list` | Renders the compiled route table. |
 | `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks controllers and prints the resolved access ladder (`#[Rule]` / `#[Voter]`). |
 | `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
+| `Waffle\Commons\Console\Command\MemoryAuditCommand` | `igor:audit` | Streams the monorepo-wide Igor memory-leak & state-mutation audit (`igor.sh`). Thin command depending only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`; the `proc_open` engine lives in `waffle-commons/runtime`. Distinct from `security:audit` (which audits ABAC/CSRF). See [§ `igor:audit`](#igoraudit) below. |
 
 All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` depends only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
+
+## `igor:audit`
+
+`MemoryAuditCommand` streams the monorepo-wide Igor audit (`igor.sh`). It is **thin by design**: it depends only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface` (plus Input/Output), so `console` gains no dependency edge — the `proc_open` engine (`ProcessAuditRunner`) and its hooked-DTO config (`IgorAuditConfig`) live in `waffle-commons/runtime`, injected by the application's `bin/waffle`. This mirrors how `db:migrate` consumes `MigrationRunnerInterface`.
+
+```php
+final readonly class MemoryAuditCommand extends AbstractCommand
+{
+    public const string NAME = 'igor:audit'; // typed class constant
+
+    public function __construct(
+        private AuditRunnerInterface $runner,   // waffle-commons/contracts
+        private string $projectRoot,            // directory holding igor.sh
+        private bool $localByDefault = false,   // set by bin/waffle when inside the container
+    ) {}
+
+    // execute(): SUCCESS (0) audit passed · FAILURE (1) dangerous state · NO_INPUT (66) script missing
+}
+```
+
+The concrete adapter, its typed constants, and the PHP 8.5 hooked `IgorAuditConfig` are documented with the engine in [runtime.md → `igor:audit` execution engine](runtime.md#igoraudit-execution-engine).
 
 ## I/O
 
@@ -59,13 +81,17 @@ All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provi
 
 ## Exit codes
 
-From `Waffle\Commons\Contracts\Console\Enum\ExitCode` (`enum ExitCode: int`):
+From `Waffle\Commons\Contracts\Console\Enum\ExitCode` (`enum ExitCode: int`, mirroring BSD `sysexits(3)`):
 
 - `SUCCESS = 0`
 - `FAILURE = 1`
-- `USAGE = 2`
+- `USAGE = 64`
+- `DATA_ERR = 65`
+- `NO_INPUT = 66`
+- `NO_PERM = 77`
+- `CONFIG = 78`
 
-`run()` returns `USAGE` when invoked with no command name (and prints the help listing), `SUCCESS` on a successful command, `FAILURE` on any thrown `ConsoleExceptionInterface` or other `Throwable` (the message is written to stderr).
+The enum also exposes `isSuccess(): bool` / `isFailure(): bool`. `run()` returns `USAGE` when invoked with no command name (and prints the help listing), `SUCCESS` on a successful command, and `FAILURE` on any thrown `ConsoleExceptionInterface` or other `Throwable` (the message is written to stderr). Individual commands may return the more specific codes — e.g. `igor:audit` returns `NO_INPUT` when `igor.sh` is missing.
 
 ## Exceptions
 
