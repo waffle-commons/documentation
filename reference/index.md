@@ -11,6 +11,7 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Routing** | `waffle-commons/routing` | `#[Route]` attribute router with route cache. | [routing.md](routing.md) |
 | **Pipeline** | `waffle-commons/pipeline` | PSR-15 middleware stack and request handler. | [pipeline.md](pipeline.md) |
 | **Security** | `waffle-commons/security` | Fail-closed ABAC engine, `#[Rule]` / `#[Voter]` / `#[PublicAccess]` attributes, stateless HMAC CSRF with `WAFFLE_SID` binding, `AnonymousSessionMiddleware`. | [security.md](security.md) |
+| **Auth** | `waffle-commons/auth` | Universal Authentication Bridge (RFC-021): OAuth2/OIDC + JWT (HS256/RS256, JWKS) + `X-Wfl-Assert-User` gateway assertions + API key/Basic, inbound middleware + outbound PSR-18 `AuthenticatedClient`; fail-closed, resettable `SecurityContext`. | [auth.md](auth.md) |
 | **HTTP Client** | `waffle-commons/http-client` | PSR-18 cURL client with `CURLOPT_PROTOCOLS` SSRF allowlist (HTTP/HTTPS only). | [http-client.md](http-client.md) |
 | **Container** | `waffle-commons/container` | PSR-11 container with autowiring and `ResettableInterface` for worker-mode reset. | [container.md](container.md) |
 | **Event Dispatcher** | `waffle-commons/event-dispatcher` | PSR-14 dispatcher and listener provider; `#[AsEventListener]` discovery. | [event-dispatcher.md](event-dispatcher.md) |

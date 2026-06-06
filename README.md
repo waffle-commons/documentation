@@ -37,6 +37,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ### Solving a Problem?
 - [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Rule]`, `#[Voter]`, CSRF.
+- [**Authenticate Requests**](how-to/authentication.md): OAuth2/OIDC, JWT Bearer, gateway assertions, API keys — inbound + outbound (RFC-021).
 - [**Add Middleware**](how-to/middleware.md): Intercepting requests.
 - [**Manage Configuration**](how-to/configuration.md): YAML + `%env(VAR)%` placeholders.
 - [**Handle Errors**](how-to/error-handling.md): RFC 7807 JSON responses.
@@ -47,6 +48,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ### Need API Details?
 - [**Security**](reference/security.md)
+- [**Auth**](reference/auth.md)
 - [**Routing**](reference/routing.md)
 - [**Data & Persistence**](reference/data.md)
 - [**`wfl` Developer CLI**](reference/wfl.md)
@@ -57,6 +59,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**The Universal Data & Persistence Layer**](explanation/data-persistence.md): Why no ORM — SQR, per-backend compilers, stateless repositories, honest drivers (RFC-022).
 - [**The Request Lifecycle**](explanation/lifecycle.md): From index.php to Response.
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).
+- [**The Universal Authentication Bridge**](explanation/authentication-universal-bridge.md): One contract surface for every identity provider — and the zero-leak SecurityContext (RFC-021).
 - [**CSRF: Signed Double-Submit**](explanation/security-csrf-double-submit.md): Stateless HMAC + per-browser binding (Beta-1 / SEC-01).
 
 ***

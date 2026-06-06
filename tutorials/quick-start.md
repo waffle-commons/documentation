@@ -286,7 +286,7 @@ Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the han
 ## 7. What's next
 
 - Validate input natively: §4 above shows `#[Dto]` + Property Hooks; [How-To: Error Handling](../how-to/error-handling.md) covers how a hook rejection becomes an RFC 7807 `422`.
-- Route a gateway catch-all: [How-To: Routing](../how-to/routing.md) documents the `priority` parameter and `{path:.*}` multi-segment matching used by the EcoShield gateway pattern.
+- Route a gateway catch-all: [How-To: Routing](../how-to/routing.md) documents the `priority` parameter and `{path:.*}` multi-segment matching used by the edge-gateway pattern.
 - Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
 - Hook into the lifecycle: see [How-To: Events](../how-to/events.md) for `RequestReceivedEvent`, `ResponseGeneratedEvent`, `TerminateEvent`.
 

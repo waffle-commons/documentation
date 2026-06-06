@@ -144,7 +144,7 @@ When a request is made:
 
 The `#[Route]` attribute takes an optional `int $priority = 0`. The router sorts the compiled table by descending priority at boot time and **caches the sorted collection**, so a hot boot pays no sort cost. Higher numbers match first; negative numbers run last.
 
-This unlocks the EcoShield-Gateway pattern: a catch-all controller that forwards any URI no other controller claimed to the legacy monolith — without throwing `404`.
+This unlocks the edge-gateway pattern: a catch-all controller that forwards any URI no other controller claimed to the legacy monolith — without throwing `404`.
 
 ```php
 use Waffle\Commons\Contracts\Routing\Attribute\Route;
