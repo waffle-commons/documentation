@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `v0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; Adds the `db:migrate` command (RFC-022)
+> **Release:** `0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; Adds the `db:migrate` command (RFC-022)
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 
@@ -37,8 +37,25 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks controllers and prints the resolved access ladder (`#[Rule]` / `#[Voter]`). |
 | `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
 | `Waffle\Commons\Console\Command\MemoryAuditCommand` | `igor:audit` | Streams the monorepo-wide Igor memory-leak & state-mutation audit (`igor.sh`). Thin command depending only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`; the `proc_open` engine lives in `waffle-commons/runtime`. Distinct from `security:audit` (which audits ABAC/CSRF). See [§ `igor:audit`](#igoraudit) below. |
+| `Waffle\Commons\Console\Command\DataWarmupCommand` | `data:warmup` | *Added in Beta-3.* Invokes every registered `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface`: compiled artifacts (parameterised SQL from SQR trees, routing tables, …) are serialised into PHP cache files and primed into OPcache shared memory, removing compilation and disk I/O from the first live request. Idempotent and strictly CLI-side; applications wire their warmers (e.g. `data`'s `QueryWarmer`) in `bin/waffle`. See [data.md → Warmup](data.md#warmup--wafflecommonsdatawarmupquerywarmer). |
 
-All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` depends only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
+All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` and `DataWarmupCommand` depend only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`, `DataWarmerInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
+
+## Waffle Maker commands (RFC-020)
+
+Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every maker extends `AbstractMakerCommand` (PSR-4 namespace discovery from the nearest `composer.json`, atomic file writes, refuses to overwrite without `--force`/`-f`, `--target=DIR` to override the destination — otherwise `src/<Subfolder>` of the current package):
+
+| Command | Generates |
+| :--- | :--- |
+| `make:controller` | An immutable controller extending `BaseController` (`--route=`, `--priority=`). |
+| `make:dto` | A `final` DTO with promoted properties + PHP 8.5 validation `set` hooks (`field:type` positionals). |
+| `make:entity` | *Added in Beta-3.* An immutable RFC-022 persistence entity with property-hook validation — the shape `PropertyHookHydrator` hydrates into (`field:type` positionals). |
+| `make:repository` | *Added in Beta-3.* A stateless repository composing the worker-safe `SQLRepository` **plus** its `DataMapperInterface` mapper pair (`--table=`, `--identity=`, `field:type` positionals; entity expected in the sibling `Entity` namespace — scaffold it first with `make:entity`). |
+| `make:middleware` | A PSR-15 middleware. |
+| `make:voter` | An ABAC security voter (fail-closed: `decide()` returns `false` by default). |
+| `make:command` | A console command class (`--command-name=`). |
+| `make:http-client` | A secure PSR-18 HTTP client wrapper (`--base-uri=`). |
+| `make:event-pair` | A coordinated PSR-14 event (`…Event extends AbstractStoppableEvent`) + `#[AsEventListener]` listener pair. |
 
 ## `igor:audit`
 

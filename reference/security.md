@@ -1,6 +1,6 @@
 # Security Reference (`waffle-commons/security`)
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 
 Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a fully stateless CSRF protection layer (signed double-submit with per-browser binding) and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
 

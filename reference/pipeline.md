@@ -1,6 +1,6 @@
 # Pipeline Reference (`waffle-commons/pipeline`)
 
-> **Release:** `v0.1.0-beta2`
+> **Release:** `0.1.0-beta3`
 > **PSR Compliance:** PSR-15 (`Psr\Http\Server\MiddlewareInterface`, `RequestHandlerInterface`)
 
 The PSR-15 middleware stack that runs every request through the kernel. The stack locks itself the moment it is converted to a handler, so middleware order cannot be tampered with mid-request.

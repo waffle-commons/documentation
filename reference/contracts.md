@@ -1,6 +1,6 @@
 # Contracts Reference (`waffle-commons/contracts`)
 
-> **Release:** `v0.1.0-beta2`
+> **Release:** `0.1.0-beta3`
 
 `waffle-commons/contracts` is the root package of the Waffle ecosystem. Every other component depends only on the contracts package plus its own declared PSR dependencies. The package contains interfaces, marker attributes, enums, exception interfaces, and ecosystem-wide typed constants — **no business logic**.
 
@@ -32,6 +32,16 @@ interface KernelInterface
 ```
 
 `reset()` is called between FrankenPHP worker requests to clear request-scoped state without re-booting.
+
+### `Waffle\Commons\Contracts\Core\TerminableInterface`
+
+*Added in Beta-3.* A kernel capable of running work **after** the response has been emitted:
+
+```php
+public function terminate(ServerRequestInterface $request, ResponseInterface $response): void;
+```
+
+The Runtime invokes `terminate()` exactly once per request — after `emit()`, before `reset()` — so heavy post-response tasks (async dispatch, buffer flushing) never delay delivery. Support is optional: the Runtime guards the call with `instanceof`, so a kernel that does not implement the interface simply skips the post-response phase. Implemented by `waffle`'s `AbstractKernel`.
 
 ## Configuration
 
@@ -136,7 +146,12 @@ Added in Beta-3; consumed by the `waffle-commons/data` component.
 | `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable PDO connections: `acquire(): PDO` (ping-before-dispense, transparent reconnect) and `release(PDO): void`. Implementations also implement `ResettableInterface`. |
 | `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface` | Forward-only SQL migration runner: `run(?Closure $onApplied = null): list<string>` — applies pending migrations in version order, idempotently. |
 | `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface` | Base contract for data-layer failures (`extends Throwable`); `getSqlState(): ?string` exposes the ANSI SQLSTATE when the backend provides one. |
+| `Waffle\Commons\Contracts\Data\Exception\SecurityPathViolationExceptionInterface` | `extends DatabaseExceptionInterface` — a Firestore operation would target a non-isolated path (guardrail Rule 1). |
+| `Waffle\Commons\Contracts\Data\Exception\UnauthenticatedAccessExceptionInterface` | `extends DatabaseExceptionInterface` — a guarded Firestore read/write was attempted without an authenticated identity (guardrail Rule 3). |
 | `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` | The Stateless Repository Layer (RFC-022 §3), `@template T of object`: `find(QueryInterface): list<T>`, `findOne(QueryInterface): T|null`, `stream(QueryInterface): Generator<int, T>` (the §4.1 buffer-streaming path). No Active Record, no Unit of Work, no Identity Map. |
+| `Waffle\Commons\Contracts\Data\Repository\WritableRepositoryInterface` | `extends RepositoryInterface` — the CRUD write surface: `save(object): void` (INSERT on null identity, UPDATE/upsert otherwise), `delete(object): void`, `findById(int\|string): ?T`. Implemented by all seven `waffle-commons/data` repositories. |
+| `Waffle\Commons\Contracts\Data\Mapper\DataMapperInterface` | Pure Data Mapper (`@template T of object`) between an immutable entity and its flat storage row: `target()`, `identityField()`, `fields(): list<string>`, `identify(T): int\|string\|null`, `toRow(T): array<string, scalar\|null>`. Keeps entities free of persistence logic (no Active Record). |
+| `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface` | *Added in Beta-3.* CLI-side artifact warmer behind `bin/waffle data:warmup`: `warmUp(): list<string>` pre-compiles expensive artifacts (SQR trees, routing tables) into PHP cache files primed into OPcache shared memory. Implementations must be stateless and idempotent — warming never runs during an HTTP request. |
 
 ### The SQR vocabulary (`Contracts\Data\Query` + `Contracts\Data\Enum`)
 

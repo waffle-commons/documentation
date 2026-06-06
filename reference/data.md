@@ -1,6 +1,6 @@
 # Data Reference (`waffle-commons/data`)
 
-> **Release:** `v0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New component (RFC-022)
+> **Release:** `0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New component (RFC-022)
 > **Requires:** PHP 8.5+, `ext-pdo`, `psr/http-client`, `psr/http-factory`, `psr/http-message`. Depends only on `waffle-commons/contracts`.
 > **Suggests:** `ext-redis` (live key-value driver), `ext-mongodb` (live document driver).
 
@@ -364,6 +364,20 @@ public function run(?Closure $onApplied = null): array;
 
 Surfaced to operators as `bin/waffle db:migrate` (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
 
+## Warmup — `Waffle\Commons\Data\Warmup\QueryWarmer`
+
+*Added in Beta-3.* Implements `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface` — the engine behind `bin/waffle data:warmup` (see [console.md](console.md)):
+
+```php
+public function __construct(array $queries, SQLCompiler $compiler, string $cacheFile);
+public function warmUp(): array; // list<string> — human-readable artifact descriptors
+```
+
+- Compiles a registry of **named SQR trees** (`array<non-empty-string, QueryInterface>`) through the dialect-bound `SQLCompiler` into a single `<?php return […]` artifact (`['name' => ['sql' => …, 'parameters' => […]]]`).
+- The artifact is replaced **atomically** (write-to-temporary + `rename`), so a resident worker can never observe a half-written file; when OPcache is active on the CLI it is immediately primed via `opcache_compile_file()`, removing compilation and disk I/O from the first live request.
+- Stateless and idempotent by construction (`final readonly`): the query map is fixed at boot and every run recompiles from scratch — safe to re-run after every deploy. Applications wire their warmers in `bin/waffle` (see the skeleton/workspace reference entry points).
+- Failures (unwritable directory, failed atomic publish) raise `WarmupException`.
+
 ## Exceptions
 
 Both implement their respective contracts interface so callers catch persistence/validation failures without coupling to a driver:
@@ -372,10 +386,13 @@ Both implement their respective contracts interface so callers catch persistence
 - `Waffle\Commons\Data\Exception\ValidationException` → `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface`. `getField(): ?string` names the offending field.
 - `Waffle\Commons\Data\Exception\SecurityPathViolationException` → `…\Data\Exception\SecurityPathViolationExceptionInterface` (extends `DatabaseExceptionInterface`). Raised when a Firestore operation would target a non-isolated path (Rule 1).
 - `Waffle\Commons\Data\Exception\UnauthenticatedAccessException` → `…\Data\Exception\UnauthenticatedAccessExceptionInterface` (extends `DatabaseExceptionInterface`). Raised when a guarded Firestore read/write is attempted without an authenticated identity (Rule 3).
+- `Waffle\Commons\Data\Exception\WarmupException` (extends `DatabaseException`). Raised when a `data:warmup` artifact cannot be compiled or published (unwritable cache directory, failed atomic rename); carries no SQLSTATE.
+
+**Leak containment:** every driver call-site wraps its backend failure with an *explicit sanitized message* — credentials, DSNs and driver internals never reach a rendered RFC 7807 body; the raw driver error survives only as `previous`, for logging.
 
 ## Worker-safety contract
 
-`PDOConnectionPool` is the only stateful object, and its state is explicitly recyclable via `reset()`. Compilers, repositories, drivers, the evaluator, the normaliser, the hydrator, and the query AST are stateless / immutable (the component passes the `igor-php` worker-mode audit with zero findings). The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
+`PDOConnectionPool` is the only stateful object, and its state is explicitly recyclable via `reset()`. Compilers, repositories, drivers, the evaluator, the normaliser, the hydrator, the warmer, and the query AST are stateless / immutable (the component passes the `igor-php` worker-mode audit with zero findings). The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
 
 ## Quick example
 

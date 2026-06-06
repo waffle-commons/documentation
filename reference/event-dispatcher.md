@@ -1,6 +1,6 @@
 # Event Dispatcher Reference (`waffle-commons/event-dispatcher`)
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **PSR Compliance:** PSR-14 (`Psr\EventDispatcher\EventDispatcherInterface`, `ListenerProviderInterface`, `StoppableEventInterface`)
 
 Minimal, strict PSR-14 dispatcher and listener provider. No magic, no auto-wiring — listeners are registered explicitly or discovered via the `#[AsEventListener]` attribute by the kernel factory.
