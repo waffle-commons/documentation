@@ -74,26 +74,43 @@ A blank field name, or an empty `in`/`notIn` value set, throws `\InvalidArgument
 
 ## Repositories (RFC-022 §3)
 
-Every repository implements `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` (`@template T of object`):
+Every repository implements `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` (`@template T of object`) for reads, and `Waffle\Commons\Contracts\Data\Repository\WritableRepositoryInterface` (which extends it) for CRUD writes:
 
 ```php
+// RepositoryInterface (read)
 public function find(QueryInterface $query): array;        // list<T>
 public function findOne(QueryInterface $query): ?object;   // T|null — bounds the call server-side where possible
 public function stream(QueryInterface $query): Generator;  // Generator<int, T> — §4.1 buffer streaming
+
+// WritableRepositoryInterface (write) extends RepositoryInterface
+public function save(object $entity): void;                // INSERT (null identity) or UPDATE/upsert
+public function delete(object $entity): void;
+public function findById(int|string $id): ?object;         // T|null
 ```
 
-All repositories are **stateless** (safe to share across worker requests), hydrate through the [`PropertyHookHydrator`](#hydrator--wafflecommonsdatahydratorpropertyhookhydrator), wrap backend failures as `DatabaseExceptionInterface`, reject malformed SQR with `\InvalidArgumentException`, and surface poisoned rows as `ValidationExceptionInterface`.
+Writes go through a pure **Data Mapper** — no Active Record. `Waffle\Commons\Contracts\Data\Mapper\DataMapperInterface` (`@template T of object`):
+
+```php
+public function target(): string;                          // table / collection / key-prefix / endpoint
+public function identityField(): string;                   // default 'id'
+public function fields(): array;                            // list<string> — projection (read counterpart of toRow keys)
+public function identify(object $entity): int|string|null; // null ⇒ save() performs an INSERT
+public function toRow(object $entity): array;              // array<string, scalar|null>
+```
+
+All repositories are **stateless** (safe to share across worker requests), hydrate through the [`PropertyHookHydrator`](#hydrator--wafflecommonsdatahydratorpropertyhookhydrator), wrap backend failures as `DatabaseExceptionInterface`, reject malformed SQR with `\InvalidArgumentException`, and surface poisoned rows as `ValidationExceptionInterface`. The relational and flat-file repositories accept the mapper as an **optional trailing argument** — omit it for a read-only repository (the write methods then throw `\InvalidArgumentException`).
 
 | Repository | Constructor | Backend / notes |
 | :--- | :--- | :--- |
-| `Repository\SQLRepository` | `(ConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler())` | Any PDO engine. `stream()` is a **true driver cursor** (row-by-row fetch, $O(1)$ buffering); operands are bound with explicit driver types (`PARAM_BOOL` / `PARAM_INT` / `PARAM_NULL` / `PARAM_STR`) so strict engines such as PostgreSQL receive real booleans; the borrowed connection returns to the pool even when a consumer abandons the generator mid-iteration. |
-| `Repository\JsonFileRepository` | `(string $path, string $target, JsonFileStore $store = new JsonFileStore())` | Atomic flat-file JSON (§4.3); SQR evaluated in memory. |
-| `Repository\KeyValueRepository` | `(KeyValueClientInterface $client, string $target, KeyValueCompiler $compiler = new KeyValueCompiler())` | Redis/DynamoDB; each stored value is one JSON document = one row; a missing key contributes no row. `findOne` never rebuilds the query (the key-value compiler rejects pagination). |
-| `Repository\MongoRepository` | `(MongoSessionInterface $session, string $target, MongoCompiler $compiler = new MongoCompiler())` | Full server-side predicate push-down through the session port. |
-| `Repository\CassandraRepository` | `(CqlSessionInterface $session, string $target, CassandraCompiler $compiler = new CassandraCompiler())` | Parameterised CQL through the injectable transport (see the CQL port note below). |
-| `Repository\GraphQLRepository` | `(GraphQLExecutor $executor, string $target, GraphQLCompiler $compiler = new GraphQLCompiler())` | External GraphQL service as a virtual database engine (§4.3). |
+| `Repository\SQLRepository` | `(ConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler(), ?DataMapperInterface $mapper = null, ?SQLWriteCompiler $writeCompiler = null)` | Any PDO engine. `stream()` is a **true driver cursor**; writes run in a transaction (rollback on failure). `$writeCompiler` SHOULD share the read compiler's dialect. |
+| `Repository\FirestoreRepository` | `forPublic(FirestoreClientInterface $client, string $target, SecurityContextInterface $security, DataMapperInterface $mapper, string $appId)` / `forPrivate(...)` | Document store with the three guardrails (§4.2) — see the [Firestore compiler](#firestore-compiler--wafflecommonsdatacompilerfirestorecompiler) + [driver](#document-firestore--driverfirestorefirestoreclientinterface). |
+| `Repository\JsonFileRepository` | `(string $path, string $target, JsonFileStore $store = new JsonFileStore(), ?DataMapperInterface $mapper = null)` | Atomic flat-file JSON (§4.3); SQR + writes evaluated in memory then written atomically. |
+| `Repository\KeyValueRepository` | `(KeyValueClientInterface $client, string $target, KeyValueCompiler $compiler = new KeyValueCompiler(), ?DataMapperInterface $mapper = null)` | Redis/DynamoDB; one JSON document per key. Writes require an explicit identity (no auto-id). |
+| `Repository\MongoRepository` | `(MongoSessionInterface $session, string $target, MongoCompiler $compiler = new MongoCompiler(), ?DataMapperInterface $mapper = null)` | Server-side push-down; writes are insert / replace-upsert / deleteOne. |
+| `Repository\CassandraRepository` | `(CqlSessionInterface $session, string $target, CassandraCompiler $compiler = new CassandraCompiler(), ?DataMapperInterface $mapper = null)` | Parameterised CQL; `save()` is a CQL `INSERT` (upsert). |
+| `Repository\GraphQLRepository` | `(GraphQLExecutor $executor, string $target, GraphQLCompiler $compiler = new GraphQLCompiler(), ?DataMapperInterface $mapper = null)` | GraphQL service as a virtual engine; writes are Hasura-style mutations. |
 
-`$target` is the `class-string<T>` of the `readonly` DTO each row hydrates into. `findOne()` rebuilds the SQR with a server-side bound (`LIMIT 1` / `limit: 1`) whenever the concrete `Query` is passed and the backend supports it; backends without a cursor (`JsonFile`, `KeyValue`, `Mongo`, `Cassandra`, `GraphQL`) implement `stream()` by yielding from the bounded result page — only `SQLRepository` streams from a live cursor.
+`$target` is the `class-string<T>` of the `readonly` DTO each row hydrates into. `findOne()` rebuilds the SQR with a server-side bound (`LIMIT 1` / `limit: 1`) whenever the concrete `Query` is passed and the backend supports it; backends without a cursor implement `stream()` by yielding from the bounded result page — only `SQLRepository` streams from a live cursor. `findById()` reuses the read path with an `identityField = id` equality predicate.
 
 ## SQL compiler — `Waffle\Commons\Data\Compiler\SQLCompiler`
 
@@ -252,9 +269,23 @@ public function __construct(
 );
 
 public function execute(CompiledGraphQLQuery $compiled): array; // list of flat rows from data.{root}
+public function mutate(CompiledGraphQLMutation $mutation): void; // write; asserts 200 + no errors, ignores the return shape
 ```
 
-POSTs the standard `{query, variables}` body (`Content-Type: application/json`), then unwraps `data.{root}`. A non-200 status, a transport failure, a malformed envelope, or a GraphQL `errors` array all fail the call as a `DatabaseException` — errors are never silently ignored.
+POSTs the standard `{query, variables}` body (`Content-Type: application/json`), then unwraps `data.{root}`. A non-200 status, a transport failure, a malformed envelope, or a GraphQL `errors` array all fail the call as a `DatabaseException` — errors are never silently ignored. `mutate()` runs a `GraphQLMutationCompiler`-produced mutation and validates only transport status + the `errors` array, so any provider's mutation return shape is accepted.
+
+### Document — `Driver\Firestore\FirestoreClientInterface`
+
+```php
+public function getDocument(string $path, string $id): ?array;                     // ?array<string, scalar|null>
+public function queryCollection(string $path, array $filters, ?int $limit): array; // equality filters ONLY (Rule 2)
+public function setDocument(string $path, ?string $id, array $row): string;         // returns the (possibly auto-assigned) id
+public function deleteDocument(string $path, string $id): void;
+```
+
+Live adapter: **`Driver\Firestore\FirestoreRestClient`** — `__construct(ClientInterface $client, RequestFactoryInterface $requestFactory, StreamFactoryInterface $streamFactory, string $endpoint, RowNormaliser $normaliser = new RowNormaliser())`. A thin REST boundary that POSTs each operation as a JSON envelope to a Firestore client / raw NoSQL proxy over PSR-18. The port is deliberately dead-simple: `queryCollection` accepts only equality filters + an optional limit, so Rule 2 is structural — compound/range/sort resolve in `FirestoreRepository` via the `InMemoryEvaluator`.
+
+> The write methods on the other ports mirror this: `KeyValueClientInterface` adds `set`/`delete`, `MongoSessionInterface` adds `insert`/`upsert`/`deleteOne`, and `CqlSessionInterface` adds `executeWrite(string $cql, array $parameters)`.
 
 ## In-memory evaluator — `Waffle\Commons\Data\Evaluation\InMemoryEvaluator`
 
@@ -339,6 +370,8 @@ Both implement their respective contracts interface so callers catch persistence
 
 - `Waffle\Commons\Data\Exception\DatabaseException` → `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface`. `getSqlState(): ?string` lifts the ANSI `SQLSTATE` from a `PDOException` (`null` for non-relational backends). `DatabaseException::fromThrowable(\Throwable, ?string)` wraps any backend error while preserving the original as `previous`.
 - `Waffle\Commons\Data\Exception\ValidationException` → `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface`. `getField(): ?string` names the offending field.
+- `Waffle\Commons\Data\Exception\SecurityPathViolationException` → `…\Data\Exception\SecurityPathViolationExceptionInterface` (extends `DatabaseExceptionInterface`). Raised when a Firestore operation would target a non-isolated path (Rule 1).
+- `Waffle\Commons\Data\Exception\UnauthenticatedAccessException` → `…\Data\Exception\UnauthenticatedAccessExceptionInterface` (extends `DatabaseExceptionInterface`). Raised when a guarded Firestore read/write is attempted without an authenticated identity (Rule 3).
 
 ## Worker-safety contract
 
