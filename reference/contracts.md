@@ -127,7 +127,7 @@ Extends `Psr\Cache\CacheItemPoolInterface` (PSR-6) for clients that need the ite
 
 Marker interface for adapters that implement probabilistic early-expiration ("stampede protection").
 
-## Data (PDO + migrations, RFC-022)
+## Data (persistence, RFC-022)
 
 Added in Beta-3; consumed by the `waffle-commons/data` component.
 
@@ -136,6 +136,19 @@ Added in Beta-3; consumed by the `waffle-commons/data` component.
 | `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable PDO connections: `acquire(): PDO` (ping-before-dispense, transparent reconnect) and `release(PDO): void`. Implementations also implement `ResettableInterface`. |
 | `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface` | Forward-only SQL migration runner: `run(?Closure $onApplied = null): list<string>` — applies pending migrations in version order, idempotently. |
 | `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface` | Base contract for data-layer failures (`extends Throwable`); `getSqlState(): ?string` exposes the ANSI SQLSTATE when the backend provides one. |
+| `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` | The Stateless Repository Layer (RFC-022 §3), `@template T of object`: `find(QueryInterface): list<T>`, `findOne(QueryInterface): T|null`, `stream(QueryInterface): Generator<int, T>` (the §4.1 buffer-streaming path). No Active Record, no Unit of Work, no Identity Map. |
+
+### The SQR vocabulary (`Contracts\Data\Query` + `Contracts\Data\Enum`)
+
+The Semantic Query Representation (RFC-022 §3.1) is the shared language between repositories and every driver compiler. The read-side contracts are **PHP 8.4+ interface properties** (`public string $field { get; }`) — satisfied by `readonly` / `private(set)` implementations, no legacy getters:
+
+| Contract | Surface |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Data\Query\QueryInterface` | `array $fields { get; }`, `?string $from { get; }`, `array $criteria { get; }`, `array $orderings { get; }`, `?int $limit { get; }`, `?int $offset { get; }` — immutable, compiler-agnostic, I/O-free. |
+| `Waffle\Commons\Contracts\Data\Query\ComparisonInterface` | `string $field { get; }`, `Operator $operator { get; }`, `array $values { get; }` (always a list — set and scalar operators share one shape; values are bound, never interpolated). |
+| `Waffle\Commons\Contracts\Data\Query\OrderInterface` | `string $field { get; }`, `Direction $direction { get; }`. |
+| `Waffle\Commons\Contracts\Data\Enum\Operator: string` | `Equal '='` … `Like 'LIKE'` (nine cases); `isSetOperator(): bool`. **Relocated in Beta-3** from `Waffle\Commons\Data\Query\Operator` (⚠️ BC: update imports). |
+| `Waffle\Commons\Contracts\Data\Enum\Direction: string` | `Ascending 'ASC'`, `Descending 'DESC'`. **Relocated in Beta-3** from `Waffle\Commons\Data\Query\Direction` (⚠️ BC). |
 
 See [data.md](data.md) for the concrete implementations.
 

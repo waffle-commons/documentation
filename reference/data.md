@@ -1,9 +1,12 @@
 # Data Reference (`waffle-commons/data`)
 
 > **Release:** `v0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New component (RFC-022)
-> **Requires:** PHP 8.5+, `ext-pdo`. Depends only on `waffle-commons/contracts`.
+> **Requires:** PHP 8.5+, `ext-pdo`, `psr/http-client`, `psr/http-factory`, `psr/http-message`. Depends only on `waffle-commons/contracts`.
+> **Suggests:** `ext-redis` (live key-value driver), `ext-mongodb` (live document driver).
 
-The data & persistence layer, designed for FrankenPHP resident-worker mode. There is **no ORM, no identity map, no change tracking**: a row becomes an immutable value object and nothing more. The component splits cleanly into a warm connection pool, a backend-agnostic query AST, parameterized compilers, a property-hook hydrator, and a stateless migration runner.
+The Universal Data & Persistence Layer, designed for FrankenPHP resident-worker mode. There is **no ORM, no identity map, no change tracking**: a row becomes an immutable value object and nothing more. The component splits cleanly into a warm connection pool, a backend-agnostic query AST (the SQR), one parameterized compiler per backend family, a property-hook hydrator, a typed stateless repository layer, live network drivers, and a stateless migration runner.
+
+For the architectural reasoning (why compile-layer + ports, why no Active Record), see [Explanation: The Universal Data & Persistence Layer](../explanation/data-persistence.md).
 
 ## Connection pool — `Waffle\Commons\Data\Connection\PDOConnectionPool`
 
@@ -27,16 +30,17 @@ public function activeCount(): int;
 - **Ping-before-dispense** — every connection is probed with `pingQuery` before it leaves the pool; a dropped socket is discarded and a fresh handle is created via `$factory`, so a stale connection never reaches the caller. The pool forces `PDO::ATTR_ERRMODE => ERRMODE_EXCEPTION` on every connection it creates.
 - **`reset()`** is the FrankenPHP worker hook: borrowed handles return to the idle set, any open transaction is rolled back (a request that crashed mid-transaction must not leak a lock into the next), and the per-connection statement cache is cleared. Sockets stay open so the next request reuses warm connections.
 - Internal maps are keyed by `spl_object_id()`, so a connection is tracked by identity and can never be double-pooled.
+- **Engine note:** Oracle has no table-less `SELECT`, so pass `pingQuery: 'SELECT 1 FROM DUAL'` when pooling `oci` connections (the workspace `AppKernelFactory` does this automatically).
 
 A pool exhaustion (`activeCount() == maxConnections`) or a failed connection raises a `DatabaseException`.
 
 ## Query AST (SQR)
 
-The query model is pure representation — it holds no backend knowledge and is consumed by a compiler.
+The query model is pure representation — it holds no backend knowledge and is consumed by a compiler. As of Beta-3 the SQR **vocabulary lives in `waffle-commons/contracts`** so the repository contract can speak it: the value classes below implement `Waffle\Commons\Contracts\Data\Query\{QueryInterface, ComparisonInterface, OrderInterface}` (PHP 8.4+ *interface properties* — `public string $field { get; }` — no legacy getters).
 
 ### `Waffle\Commons\Data\Query\Query`
 
-Immutable, copy-on-write builder. Every method returns a new instance.
+Immutable, copy-on-write builder implementing `QueryInterface`. Every method returns a new instance.
 
 ```php
 public static function select(string ...$fields): self;
@@ -61,16 +65,41 @@ Static factory producing `Comparison` predicates (centralises field validation; 
 
 A blank field name, or an empty `in`/`notIn` value set, throws `\InvalidArgumentException`.
 
-### Enums
+### Enums (relocated to contracts in Beta-3 — ⚠️ BC)
 
-- `Waffle\Commons\Data\Query\Operator: string` — `Equal '='`, `NotEqual '<>'`, `GreaterThan '>'`, `GreaterThanOrEqual '>='`, `LessThan '<'`, `LessThanOrEqual '<='`, `In 'IN'`, `NotIn 'NOT IN'`, `Like 'LIKE'`; `isSetOperator(): bool` distinguishes `IN`/`NOT IN`.
-- `Waffle\Commons\Data\Query\Direction: string` — `Ascending 'ASC'`, `Descending 'DESC'`.
+- `Waffle\Commons\Contracts\Data\Enum\Operator: string` — `Equal '='`, `NotEqual '<>'`, `GreaterThan '>'`, `GreaterThanOrEqual '>='`, `LessThan '<'`, `LessThanOrEqual '<='`, `In 'IN'`, `NotIn 'NOT IN'`, `Like 'LIKE'`; `isSetOperator(): bool` distinguishes `IN`/`NOT IN`.
+- `Waffle\Commons\Contracts\Data\Enum\Direction: string` — `Ascending 'ASC'`, `Descending 'DESC'`.
+
+> **Breaking change:** these enums previously lived at `Waffle\Commons\Data\Query\Operator` / `Direction`. Update imports to the `Contracts\Data\Enum` namespace.
+
+## Repositories (RFC-022 §3)
+
+Every repository implements `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` (`@template T of object`):
+
+```php
+public function find(QueryInterface $query): array;        // list<T>
+public function findOne(QueryInterface $query): ?object;   // T|null — bounds the call server-side where possible
+public function stream(QueryInterface $query): Generator;  // Generator<int, T> — §4.1 buffer streaming
+```
+
+All repositories are **stateless** (safe to share across worker requests), hydrate through the [`PropertyHookHydrator`](#hydrator--wafflecommonsdatahydratorpropertyhookhydrator), wrap backend failures as `DatabaseExceptionInterface`, reject malformed SQR with `\InvalidArgumentException`, and surface poisoned rows as `ValidationExceptionInterface`.
+
+| Repository | Constructor | Backend / notes |
+| :--- | :--- | :--- |
+| `Repository\SQLRepository` | `(ConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler())` | Any PDO engine. `stream()` is a **true driver cursor** (row-by-row fetch, $O(1)$ buffering); operands are bound with explicit driver types (`PARAM_BOOL` / `PARAM_INT` / `PARAM_NULL` / `PARAM_STR`) so strict engines such as PostgreSQL receive real booleans; the borrowed connection returns to the pool even when a consumer abandons the generator mid-iteration. |
+| `Repository\JsonFileRepository` | `(string $path, string $target, JsonFileStore $store = new JsonFileStore())` | Atomic flat-file JSON (§4.3); SQR evaluated in memory. |
+| `Repository\KeyValueRepository` | `(KeyValueClientInterface $client, string $target, KeyValueCompiler $compiler = new KeyValueCompiler())` | Redis/DynamoDB; each stored value is one JSON document = one row; a missing key contributes no row. `findOne` never rebuilds the query (the key-value compiler rejects pagination). |
+| `Repository\MongoRepository` | `(MongoSessionInterface $session, string $target, MongoCompiler $compiler = new MongoCompiler())` | Full server-side predicate push-down through the session port. |
+| `Repository\CassandraRepository` | `(CqlSessionInterface $session, string $target, CassandraCompiler $compiler = new CassandraCompiler())` | Parameterised CQL through the injectable transport (see the CQL port note below). |
+| `Repository\GraphQLRepository` | `(GraphQLExecutor $executor, string $target, GraphQLCompiler $compiler = new GraphQLCompiler())` | External GraphQL service as a virtual database engine (§4.3). |
+
+`$target` is the `class-string<T>` of the `readonly` DTO each row hydrates into. `findOne()` rebuilds the SQR with a server-side bound (`LIMIT 1` / `limit: 1`) whenever the concrete `Query` is passed and the backend supports it; backends without a cursor (`JsonFile`, `KeyValue`, `Mongo`, `Cassandra`, `GraphQL`) implement `stream()` by yielding from the bounded result page — only `SQLRepository` streams from a live cursor.
 
 ## SQL compiler — `Waffle\Commons\Data\Compiler\SQLCompiler`
 
 ```php
 public function __construct(private SQLDialect $dialect = SQLDialect::MySQL);
-public function compile(Query $query): CompiledQuery; // throws \InvalidArgumentException
+public function compile(QueryInterface $query): CompiledQuery; // throws \InvalidArgumentException
 ```
 
 Produces a `Waffle\Commons\Data\Compiler\CompiledQuery` (`final readonly`):
@@ -82,20 +111,23 @@ public array $parameters;  // positional bound values, in order
 
 All values are bound as positional `?` placeholders — **no value is ever interpolated into the SQL string** (OWASP A03). Identifiers are quoted per dialect. `compile()` throws `\InvalidArgumentException` when the query has no source table or a set predicate carries no values.
 
-`Waffle\Commons\Data\Compiler\SQLDialect` (`enum`) selects identifier quoting and pagination grammar:
+`Waffle\Commons\Data\Compiler\SQLDialect` (`enum`) selects identifier quoting and pagination grammar — **all six major relational engines** are covered:
 
 | Case | Identifier quoting | Pagination |
 | :--- | :--- | :--- |
-| `SQLDialect::MySQL` | `` `ident` `` | `LIMIT … OFFSET …` |
-| `SQLDialect::SQLite` | `` `ident` `` | `LIMIT … OFFSET …` |
-| `SQLDialect::MSSQL` | `[ident]` | `OFFSET … ROWS FETCH NEXT … ROWS ONLY` |
+| `SQLDialect::MySQL` | `` `ident` `` | `LIMIT … OFFSET …` (64-bit sentinel when only an offset is set) |
+| `SQLDialect::MariaDB` | `` `ident` `` | identical to MySQL (wire- and syntax-compatible) |
+| `SQLDialect::SQLite` | `"ident"` | `LIMIT … OFFSET …` (`-1` sentinel) |
+| `SQLDialect::MSSQL` | `[ident]` | `OFFSET … ROWS FETCH NEXT … ROWS ONLY` (requires an `ORDER BY`) |
+| `SQLDialect::PostgreSQL` | `"ident"` | independent `LIMIT …` / `OFFSET …` (an offset may stand alone) |
+| `SQLDialect::Oracle` | `"ident"` | `OFFSET … ROWS FETCH NEXT … ROWS ONLY` (12c+; supply an `ORDER BY` for a deterministic page) |
 
 `SQLDialect::quoteIdentifier(string): string` quotes dotted identifiers segment-by-segment (and escapes embedded quote characters); `SQLDialect::paginate(?int $limit, ?int $offset): string`.
 
 ## Firestore compiler — `Waffle\Commons\Data\Compiler\FirestoreCompiler`
 
 ```php
-public function compile(Query $query, FirestoreScope $scope): CompiledFirestoreQuery;
+public function compile(QueryInterface $query, FirestoreScope $scope): CompiledFirestoreQuery;
 ```
 
 Targets Cloud Firestore's structured query shape with **mandatory path isolation**:
@@ -105,7 +137,7 @@ FirestoreScope::public(string $appId, string $collection): self;            // /
 FirestoreScope::private(string $appId, string $userId, string $collection): self; // /artifacts/{appId}/users/{userId}/{collection}
 ```
 
-Path segments are validated and URL-encoded; illegal segments are rejected. Only equality predicates are pushed server-side; range comparisons and ordering set `requiresInMemoryFilter = true` so the caller knows to post-filter client-side. The result `Waffle\Commons\Data\Compiler\CompiledFirestoreQuery` (`final readonly`) exposes:
+Path segments are validated and URL-encoded; illegal segments are rejected. Only equality predicates are pushed server-side; range comparisons and ordering set `requiresInMemoryFilter = true` so the caller knows to post-filter client-side (the [`InMemoryEvaluator`](#in-memory-evaluator--wafflecommonsdataevaluationinmemoryevaluator) is that engine). The result `Waffle\Commons\Data\Compiler\CompiledFirestoreQuery` (`final readonly`) exposes:
 
 ```php
 public string $path;
@@ -115,6 +147,151 @@ public ?int   $limit;
 public bool   $requiresInMemoryFilter;
 public function toJson(): string;
 ```
+
+## MongoDB compiler — `Waffle\Commons\Data\Compiler\MongoCompiler`
+
+```php
+public function compile(QueryInterface $query): CompiledMongoQuery; // throws \InvalidArgumentException (no collection)
+```
+
+Unlike Firestore, MongoDB evaluates rich predicates server-side, so **every** predicate is pushed down into a native filter document — nothing is deferred to memory. Operators map onto `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`; a SQL `LIKE` becomes an **anchored, metacharacter-escaped** `$regex` (`%` → `.*`, `_` → `.`). The explicit `$eq` form is used even for equality so multiple predicates on one field merge losslessly into a single operator document.
+
+`CompiledMongoQuery` (`final readonly`) mirrors the driver's two-argument `find($filter, $options)` shape:
+
+```php
+public string $collection;
+public array  $filter;              // field → operator → operand
+public MongoFindOptions $options;   // projection, sort, limit, skip
+```
+
+`MongoFindOptions` (`final readonly`): `array $projection` (field → 1), `array $sort` (field → 1|-1), `?int $limit`, `?int $skip`.
+
+## Key-value compiler — `Waffle\Commons\Data\Compiler\KeyValueCompiler`
+
+```php
+public function compile(QueryInterface $query): CompiledKeyValueCommand; // throws \InvalidArgumentException
+```
+
+A key-value store addresses opaque values by key alone, so the compiler accepts **only** the degenerate SQR that maps onto a key lookup and rejects everything richer with a precise message — never a silent mistranslation:
+
+- accepted: a single key-equality predicate (→ `GET`) or key-membership predicate (→ `MGET`);
+- rejected: a missing namespace (`from()`), any projection, ordering, `limit()`/`offset()`, more than one predicate, any other operator, or a `null` key.
+
+`CompiledKeyValueCommand` (`final readonly`): `KeyValueOperation $operation` (`Get = 'GET'` | `MGet = 'MGET'`), `string $namespace`, `array $keys` (fully-qualified, `{namespace}:{value}`-prefixed).
+
+## Cassandra compiler — `Waffle\Commons\Data\Compiler\CassandraCompiler`
+
+```php
+public function compile(QueryInterface $query): CompiledCassandraQuery; // throws \InvalidArgumentException
+```
+
+CQL is SQL-like but deliberately narrower: equality, the four range operators, and `IN` compile to parameterised CQL with `?` markers; **`<>`, `NOT IN`, `LIKE`, and `OFFSET` pagination are rejected** (CQL has none of them — Cassandra pages with token state). `CompiledCassandraQuery` (`final readonly`):
+
+```php
+public string $cql;
+public array  $parameters;
+public bool   $requiresAllowFiltering; // advisory: true whenever a WHERE is present —
+                                       // only the deployment knows its primary keys
+```
+
+## GraphQL compiler — `Waffle\Commons\Data\Compiler\GraphQLCompiler`
+
+```php
+public function compile(QueryInterface $query): CompiledGraphQLQuery; // throws \InvalidArgumentException
+```
+
+Elevates an external GraphQL service to a virtual database engine (§4.3): the source becomes the root field, the projection the selection set, predicates a `where` argument in the conventional nested operator form (`field: {_gt: $v0}`), and pagination the `limit`/`offset` arguments. Every operand is emitted as a **declared variable, never inlined** — the injection guarantee of bound `?` parameters, in GraphQL form. Root, projection, and predicate names are validated against the GraphQL name grammar (`/^[_A-Za-z][_0-9A-Za-z]*$/`). GraphQL has no `SELECT *`, so an empty projection is rejected.
+
+`CompiledGraphQLQuery` (`final readonly`):
+
+```php
+public string $query;       // executable GraphQL document
+public array  $variables;   // operands keyed by variable name
+public string $root;        // root field the executor reads rows from (data.{root})
+public function toJson(): string; // standard {query, variables} POST body ({} when no variables)
+```
+
+## Live network drivers (`Waffle\Commons\Data\Driver\…`)
+
+Driver transports are **ports**: tiny interfaces the repositories depend on, with thin live adapters over the actual extensions. Repository logic stays fully testable without a server; every driver failure is rethrown as a `DatabaseException` (§7.3).
+
+### Key-value — `Driver\KeyValue\KeyValueClientInterface`
+
+```php
+public function get(string $key): ?string;            // null on a miss
+public function getMany(array $keys): array;          // array<string, string|null>, keyed by requested key
+```
+
+Live adapter: **`Driver\KeyValue\RedisKeyValueClient`** (`final`, requires `ext-redis`) — wraps an injected, connected `\Redis` handle (held `readonly`; only stateless `GET`/`MGET` commands, no transactions or subscriptions).
+
+### Document — `Driver\Mongo\MongoSessionInterface`
+
+```php
+public function find(CompiledMongoQuery $query): array; // list<array<string, int|float|string|bool|null>>
+```
+
+Live adapter: **`Driver\Mongo\MongoDriverSession`** (`final`, requires `ext-mongodb`) — `__construct(Manager $manager, string $database, RowNormaliser $normaliser = new RowNormaliser())`. The port exists because the extension's `MongoDB\Driver\Manager` is `final` and cannot be doubled. Documents are read with an array type map and validated into flat scalar rows; **the BSON `_id` is excluded by default** (a BSON `ObjectId` is not a flat scalar and would rightly be rejected) — store an explicit scalar id field instead.
+
+### Wide-column — `Driver\Cql\CqlSessionInterface`
+
+```php
+public function execute(CompiledCassandraQuery $query): array;
+```
+
+The transport is deliberately injectable: **as of PHP 8.5 no maintained native CQL binary-protocol client exists** (the DataStax `ext-cassandra` is abandoned). Live access goes through an environment-provided adapter — typically a Stargate gateway (whose GraphQL face is served by the `GraphQLExecutor` family) or a future extension. Implementations decide whether to honour `requiresAllowFiltering` by appending `ALLOW FILTERING`.
+
+### GraphQL — `Driver\Graph\GraphQLExecutor`
+
+```php
+public function __construct(
+    ClientInterface $client,                 // PSR-18 — the framework's async http-client in production
+    RequestFactoryInterface $requestFactory, // PSR-17
+    StreamFactoryInterface $streamFactory,   // PSR-17
+    string $endpoint,
+    RowNormaliser $normaliser = new RowNormaliser(),
+);
+
+public function execute(CompiledGraphQLQuery $compiled): array; // list of flat rows from data.{root}
+```
+
+POSTs the standard `{query, variables}` body (`Content-Type: application/json`), then unwraps `data.{root}`. A non-200 status, a transport failure, a malformed envelope, or a GraphQL `errors` array all fail the call as a `DatabaseException` — errors are never silently ignored.
+
+## In-memory evaluator — `Waffle\Commons\Data\Evaluation\InMemoryEvaluator`
+
+```php
+public function evaluate(QueryInterface $query, array $rows): array; // filter → sort → paginate
+```
+
+The engine behind the *fetch-simple-then-filter* strategy (flat-file JSON, and Firestore when `requiresInMemoryFilter` is raised). Semantics are SQL-faithful and strict: equality is `===` / set membership is strict `in_array`; **a `NULL` on either side of a range predicate never matches** (`NULL > x` is unknown); `LIKE` is anchored with `%`/`_` wildcards and never matches a non-string; multi-key sorting ranks **nulls first, deterministically**. Holds no state — every call is pure over its arguments.
+
+## Flat-file JSON store — `Waffle\Commons\Data\Storage\JsonFileStore`
+
+```php
+public function __construct(
+    InMemoryEvaluator $evaluator = new InMemoryEvaluator(),
+    RowNormaliser $normaliser = new RowNormaliser(),
+);
+
+public function read(string $path): array;                       // [] when the file does not exist
+public function query(string $path, QueryInterface $query): array;
+public function write(string $path, array $rows): void;          // atomic: temp file + rename
+```
+
+RFC-022 §4.3 storage: each collection is one JSON file holding a list of flat rows. Writes are crash- and concurrency-safe by construction — the payload is written to a uniquely-named temp file **in the same directory** under `LOCK_EX`, then `rename()`d over the target (atomic on POSIX), so a reader sees either the whole previous file or the whole new one. The temp file never touches `sys_get_temp_dir()` (statelessness mandate; same-filesystem rename). Decoded data is validated through the `RowNormaliser` — a corrupt store throws a `DatabaseException`.
+
+**Type note:** JSON carries a single number type, so a whole-number float (`7.0`) is encoded as `7` and reads back as an `int`.
+
+## Row normaliser — `Waffle\Commons\Data\Hydrator\RowNormaliser`
+
+```php
+public function fromJsonRows(string $json): array;               // JSON payload → list of flat rows
+public function fromJsonRow(string $json): array;                // one JSON document → one flat row
+public function normaliseAll(array $rows): array;
+public function normalise(array $row): array;
+public function fromFetch(PDOStatement $statement): ?array;      // next cursor row, null when exhausted
+```
+
+The **single funnel** for untyped backend output (`json_decode()`, `PDOStatement::fetch()`, wire payloads are `mixed` by signature): every value is narrowed by an `is_array()` / `is_scalar()` guard before use, and any shape violation throws a `DatabaseException` — a poisoned row never reaches application code with a widened type.
 
 ## Hydrator — `Waffle\Commons\Data\Hydrator\PropertyHookHydrator`
 
@@ -154,7 +331,7 @@ public function run(?Closure $onApplied = null): array;
 
 **Engine caveat:** per-migration transactions are fully atomic on engines with transactional DDL (SQLite, PostgreSQL). On MySQL, DDL (`CREATE`/`ALTER TABLE`) triggers an implicit commit, so a failed DDL step cannot be rolled back — keep one schema change per migration file on MySQL.
 
-Surfaced to operators as `bin/waffle db:migrate` (see [console.md](console.md)). For the end-to-end workflow, see [How to: Database Migrations](../how-to/database-migrations.md).
+Surfaced to operators as `bin/waffle db:migrate` (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
 
 ## Exceptions
 
@@ -165,26 +342,41 @@ Both implement their respective contracts interface so callers catch persistence
 
 ## Worker-safety contract
 
-`PDOConnectionPool` is the only stateful object, and its state is explicitly recyclable via `reset()`. Compilers, the hydrator, and the query AST are stateless / immutable. The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
+`PDOConnectionPool` is the only stateful object, and its state is explicitly recyclable via `reset()`. Compilers, repositories, drivers, the evaluator, the normaliser, the hydrator, and the query AST are stateless / immutable (the component passes the `igor-php` worker-mode audit with zero findings). The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
 
 ## Quick example
 
 ```php
-use Waffle\Commons\Data\Query\Query;
-use Waffle\Commons\Data\Query\Criteria;
 use Waffle\Commons\Data\Compiler\SQLCompiler;
 use Waffle\Commons\Data\Compiler\SQLDialect;
+use Waffle\Commons\Data\Query\Criteria;
+use Waffle\Commons\Data\Query\Query;
+use Waffle\Commons\Data\Repository\SQLRepository;
+
+// One readonly DTO per row; Property Hooks validate at construction.
+final readonly class UserRow
+{
+    public function __construct(
+        public string $id,
+        public string $email,
+    ) {}
+}
+
+/** @var SQLRepository<UserRow> $users */
+$users = new SQLRepository($pool, UserRow::class, new SQLCompiler(SQLDialect::PostgreSQL));
 
 $query = Query::select('id', 'email')
     ->from('users')
     ->where(Criteria::eq('status', 'active'))
+    ->orderBy('id')
     ->limit(10);
 
-$compiled = new SQLCompiler(SQLDialect::SQLite)->compile($query);
+$page = $users->find($query);          // list<UserRow>
+$first = $users->findOne($query);      // UserRow|null — server-side LIMIT 1
 
-$connection = $pool->acquire();
-$statement = $pool->prepare($connection, $compiled->sql);
-$statement->execute($compiled->parameters);
-// ... map rows via PropertyHookHydrator ...
-$pool->release($connection);
+foreach ($users->stream($query) as $user) {
+    // true driver cursor: one row in memory at a time (§4.1)
+}
 ```
+
+The same `$query` compiles unchanged for any other backend — swap the repository (`MongoRepository`, `KeyValueRepository`, …) and the SQR is translated into that engine's native form.

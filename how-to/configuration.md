@@ -23,17 +23,17 @@ The `waffle-commons/data` layer reads its connection settings from the `waffle.d
 # config/app.yaml
 waffle:
   database:
-    driver: 'mysql'
+    driver: 'pgsql'   # pgsql (default) | mysql/mariadb | sqlite | sqlsrv | oci
     host: '%env(DB_HOST)%'
     port: '%env(DB_PORT)%'
     database: '%env(DB_NAME)%'
     username: '%env(DB_USER)%'
     password: '%env(DB_PASSWORD)%'
-    charset: 'utf8mb4'
+    charset: 'utf8'   # ignored by pgsql; used by mysql/oci
     migrations_path: 'migrations'
 ```
 
-`AppKernelFactory::buildConnectionPool($config)` turns this into a `PDOConnectionPool`. See [How to: Database Migrations](database-migrations.md) and the [data reference](../reference/data.md).
+`AppKernelFactory::buildConnectionPool($config)` turns this into a `PDOConnectionPool`, building the engine-specific DSN per driver (`buildDsn()`) and an Oracle-aware ping query. In the workspace sandbox `DB_HOST` is the `waffle-postgres` compose service. See [How to: Database Migrations](database-migrations.md) and the [data reference](../reference/data.md).
 
 ## Injecting Configuration into a Service
 

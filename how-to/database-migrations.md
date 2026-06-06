@@ -9,21 +9,23 @@ Add a `database` block to `config/app.yaml`. Credentials come from the environme
 ```yaml
 waffle:
   database:
-    driver: 'mysql'
+    driver: 'pgsql'                 # pgsql (default) | mysql/mariadb | sqlite | sqlsrv | oci
     host: '%env(DB_HOST)%'
     port: '%env(DB_PORT)%'
     database: '%env(DB_NAME)%'
     username: '%env(DB_USER)%'
     password: '%env(DB_PASSWORD)%'
-    charset: 'utf8mb4'
+    charset: 'utf8'                 # ignored by pgsql (client encoding is negotiated); used by mysql/oci
     migrations_path: 'migrations'   # relative to the project root
 ```
 
-…and set the values in `.env` (local) / your orchestrator (production):
+`AppKernelFactory::buildDsn()` produces the engine-specific PDO DSN for each driver (PostgreSQL takes no `charset` DSN attribute; SQLite expects a file path; SQL Server and Oracle have their own grammar) and adapts the pool's liveness probe (`SELECT 1 FROM DUAL` on Oracle).
+
+…and set the values in `.env` (local) / your orchestrator (production). The workspace template ships a ready **`waffle-postgres`** compose service (`postgres:17-alpine`, healthcheck, persistent volume), so `DB_HOST` is that service name on the internal network:
 
 ```dotenv
-DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_HOST=waffle-postgres   # the compose service name; use 127.0.0.1 from the host (5432 is published)
+DB_PORT=5432
 DB_NAME=waffle
 DB_USER=waffle
 DB_PASSWORD=waffle

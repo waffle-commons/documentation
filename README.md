@@ -54,6 +54,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ### Under the Hood
 - [**Architecture**](explanation/architecture.md): The Component-First philosophy.
+- [**The Universal Data & Persistence Layer**](explanation/data-persistence.md): Why no ORM — SQR, per-backend compilers, stateless repositories, honest drivers (RFC-022).
 - [**The Request Lifecycle**](explanation/lifecycle.md): From index.php to Response.
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).
 - [**CSRF: Signed Double-Submit**](explanation/security-csrf-double-submit.md): Stateless HMAC + per-browser binding (Beta-1 / SEC-01).
