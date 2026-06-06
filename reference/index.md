@@ -21,7 +21,7 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `db:migrate`, `igor:audit`. | [console.md](console.md) |
 | **Config** | `waffle-commons/config` | Native YAML (ext-yaml) configuration loader with strict typing. | [config.md](config.md) |
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
-| **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
+| **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `Assert` (validation & cleansing), `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
 
 ## Developer tooling
 

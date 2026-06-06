@@ -143,6 +143,31 @@ curl -k -X POST https://localhost/greet \
 
 A plain `\InvalidArgumentException` thrown from a hook is automatically unified to a `422`; throw a `Waffle\Exception\ValidationException` instead when you want the `field` key populated in the payload. See [How-To: Error Handling](../how-to/error-handling.md) for the complete mapping.
 
+### Reusable checks with `Assert`
+
+The hook above hand-rolls its validation — perfect when the rule is bespoke. For the common cases (e-mail, length, numeric range, IP…), `waffle-commons/utils` ships a stateless `Assert` helper that **validates *and* returns the cleansed value**, so a field collapses to a single line. It doesn't replace the property-hook philosophy; it just makes it DRY:
+
+```php
+use Waffle\Commons\Utils\Assert;
+
+#[Dto]
+final class RegistrationInput
+{
+    // validated, then stored trimmed + lower-cased — in one line
+    public private(set) string $email {
+        set => Assert::email($value);
+    }
+
+    public private(set) int $age {
+        set => Assert::range($value, 18, 130);
+    }
+
+    // …
+}
+```
+
+`Assert` throws a `ValidationException` that implements the same `ValidationExceptionInterface` (so it still renders as a `422`). See [How-To: Validate & Cleanse Input](../how-to/validate-input.md) and the [Utils Reference](../reference/utils.md#assert--input-validation--cleansing).
+
 ## 5. The Kernel — assembled in your `AppKernelFactory`
 
 The skeleton's `src/Factory/AppKernelFactory.php` wires every component the kernel needs. The setter contract is verbatim from `Waffle\Abstract\AbstractKernel`:

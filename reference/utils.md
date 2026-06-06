@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `v0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New: the `Assert` validation & cleansing layer
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
@@ -11,8 +11,9 @@ Pure-function helper services used across the ecosystem. No I/O. No state across
 | `Waffle\Commons\Utils\Service\ClassParser` | Resolves the fully-qualified class/interface/trait/enum name from a PHP file using the native tokenizer. |
 | `Waffle\Commons\Utils\Service\AttributeReader` | Wraps PHP 8 `ReflectionClass::getAttributes()` with type-safe convenience helpers. |
 | `Waffle\Commons\Utils\Service\ReflectionInspector` | Helper for parameter / return-type / promoted-property inspection. |
+| `Waffle\Commons\Utils\Assert` | Static entry point for input validation **and** cleansing — drops straight into PHP 8.5 property-hook setters. |
 
-All three are `final readonly`. None of them touch superglobals or filesystem state beyond what's passed to them explicitly.
+The three `Service\*` classes are `final readonly`. None of them touch superglobals or filesystem state beyond what's passed to them explicitly. `Assert` has its own section below.
 
 ## `ClassParser`
 
@@ -72,14 +73,84 @@ Typical operations:
 
 All operations are stateless reflections — they don't cache. Callers that need caching layer it themselves.
 
+## `Assert` — input validation & cleansing
+
+`Assert` validates **and returns the cleansed value** in a single call, so it drops straight into a PHP 8.5 property-hook short-setter — the value is checked and normalised in one line:
+
+```php
+use Waffle\Commons\Utils\Assert;
+
+#[Dto]
+final class RegistrationInput
+{
+    // validates the address, then stores it trimmed + lower-cased
+    public private(set) string $email {
+        set => Assert::email($value);
+    }
+}
+```
+
+Every method is `public static`, pure and deterministic. The class is `final readonly` with a private constructor: call the methods statically, never instantiate it.
+
+It is **complementary** to the collecting `Contracts\Validation\ValidatorInterface` (which gathers *every* violation). `Assert` is the *fail-fast* cleanser that throws on the first bad value — exactly what a property hook wants.
+
+### Composition (Strategy A — vertical traits)
+
+The surface is split into four concern families, each a trait composed into `Assert`. You always call through the one entry point (`Assert::email(...)`), but each family stays small and focused:
+
+| Family (trait) | Methods |
+| :--- | :--- |
+| `StringAssertionsTrait` | `email`, `uuid`, `length`, `regex`, `notEmpty` |
+| `NumericAssertionsTrait` | `greaterThanOrEqual`, `lessThanOrEqual`, `range`, `positive` |
+| `NetworkAssertionsTrait` | `ip`, `port`, `cidr` |
+| `FileAssertionsTrait` | `exists`, `readable`, `writable` |
+
+### Methods
+
+Each method accepts an optional trailing `?string $message` to override the default error text. Numeric methods return the number unchanged; string methods return the **normalised** value.
+
+| Method | Validates | Returns |
+| :--- | :--- | :--- |
+| `email(string, ?string): string` | RFC e-mail | trimmed + lower-cased |
+| `uuid(string, ?string): string` | UUID v4 / v5 | trimmed + lower-cased |
+| `length(string, int $min, int $max, ?string): string` | inclusive `mb_strlen` window | value unchanged |
+| `regex(string, string $pattern, ?string): string` | PCRE match | value unchanged |
+| `notEmpty(string, ?string): string` | non-blank after trim | trimmed |
+| `greaterThanOrEqual(int\|float, int\|float, ?string)` | `>= threshold` | value unchanged |
+| `lessThanOrEqual(int\|float, int\|float, ?string)` | `<= threshold` | value unchanged |
+| `range(int\|float, int\|float $min, int\|float $max, ?string)` | inclusive window | value unchanged |
+| `positive(int\|float, ?string)` | `> 0` | value unchanged |
+| `ip(string, ?string): string` | IPv4 / IPv6 | trimmed + lower-cased |
+| `port(int, ?string): int` | `1..65535` | value unchanged |
+| `cidr(string, ?string): string` | `address/prefix`, family-bounded prefix | trimmed + lower-cased |
+| `exists(string, ?string): string` | path exists | the safe (trimmed) path |
+| `readable(string, ?string): string` | path readable | the safe (trimmed) path |
+| `writable(string, ?string): string` | path writable | the safe (trimmed) path |
+
+The file methods first screen each path for the **null-byte injection** vector (`\0`) and for emptiness before touching the filesystem.
+
+### Failure: `ValidationException`
+
+Every assertion throws `Waffle\Commons\Utils\Exception\ValidationException`, which **extends the SPL `\InvalidArgumentException`** *and* **implements `Contracts\Exception\Validation\ValidationExceptionInterface`**. One type satisfies both contracts:
+
+- a plain `catch (\InvalidArgumentException $e)` works;
+- the `JsonErrorRenderer` recognises the interface and emits an **RFC 7807 HTTP 422**;
+- the code defaults to `422`, matching `Waffle\Exception\ValidationException`.
+
+`Assert` checks are *value-level*, so the thrown exception's `getField()` is `null` — the assertion does not know the property name. When you need the `field` key populated in the 422 payload, throw `Waffle\Exception\ValidationException` with `field:` yourself inside a full hook. See [How-To: Validate & Cleanse Input](../how-to/validate-input.md).
+
+### Worker-mode safety (`Assert`)
+
+`Assert` and its four traits declare **no properties of any kind** — no instances, no `static` caches. Nothing survives a request, so it is safe under FrankenPHP resident-worker mode. This is enforced two ways: a reflection/determinism PHPUnit test, and a static `igor-php` audit (`composer igor`) that fails on any worker-unsafe state.
+
 ## Worker-mode safety
 
-All three classes are `final readonly` with no constructor parameters and no instance state. Safe to share across worker requests — and in fact intended to be reused.
+The three `Service\*` classes are `final readonly` with no constructor parameters and no instance state; `Assert` and its traits declare no properties at all and expose only `static` methods. Either way nothing survives a request — safe to share across worker requests, and in fact intended to be reused.
 
 ## What's deliberately *not* here
 
 - **HTTP helpers** — those live in `waffle-commons/http`.
-- **String / array helpers** — PHP's standard library plus a recent runtime makes them unnecessary.
+- **Generic string / array manipulation** — PHP's standard library plus a recent runtime makes it unnecessary. (Input *validation & cleansing* is the deliberate exception — see [`Assert`](#assert--input-validation--cleansing).)
 - **Container interaction** — DI is `waffle-commons/container`'s job.
 - **Logging** — `waffle-commons/log`.
 
