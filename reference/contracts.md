@@ -1,6 +1,6 @@
 # Contracts Reference (`waffle-commons/contracts`)
 
-> **Release:** `v0.1.0-beta2`
+> **Release:** `0.1.0-beta3`
 
 `waffle-commons/contracts` is the root package of the Waffle ecosystem. Every other component depends only on the contracts package plus its own declared PSR dependencies. The package contains interfaces, marker attributes, enums, exception interfaces, and ecosystem-wide typed constants — **no business logic**.
 
@@ -32,6 +32,16 @@ interface KernelInterface
 ```
 
 `reset()` is called between FrankenPHP worker requests to clear request-scoped state without re-booting.
+
+### `Waffle\Commons\Contracts\Core\TerminableInterface`
+
+*Added in Beta-3.* A kernel capable of running work **after** the response has been emitted:
+
+```php
+public function terminate(ServerRequestInterface $request, ResponseInterface $response): void;
+```
+
+The Runtime invokes `terminate()` exactly once per request — after `emit()`, before `reset()` — so heavy post-response tasks (async dispatch, buffer flushing) never delay delivery. Support is optional: the Runtime guards the call with `instanceof`, so a kernel that does not implement the interface simply skips the post-response phase. Implemented by `waffle`'s `AbstractKernel`.
 
 ## Configuration
 
@@ -126,6 +136,36 @@ Extends `Psr\Cache\CacheItemPoolInterface` (PSR-6) for clients that need the ite
 ### `Waffle\Commons\Contracts\Cache\StampedeProtectionInterface`
 
 Marker interface for adapters that implement probabilistic early-expiration ("stampede protection").
+
+## Data (persistence, RFC-022)
+
+Added in Beta-3; consumed by the `waffle-commons/data` component.
+
+| Interface | Purpose |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable PDO connections: `acquire(): PDO` (ping-before-dispense, transparent reconnect) and `release(PDO): void`. Implementations also implement `ResettableInterface`. |
+| `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface` | Forward-only SQL migration runner: `run(?Closure $onApplied = null): list<string>` — applies pending migrations in version order, idempotently. |
+| `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface` | Base contract for data-layer failures (`extends Throwable`); `getSqlState(): ?string` exposes the ANSI SQLSTATE when the backend provides one. |
+| `Waffle\Commons\Contracts\Data\Exception\SecurityPathViolationExceptionInterface` | `extends DatabaseExceptionInterface` — a Firestore operation would target a non-isolated path (guardrail Rule 1). |
+| `Waffle\Commons\Contracts\Data\Exception\UnauthenticatedAccessExceptionInterface` | `extends DatabaseExceptionInterface` — a guarded Firestore read/write was attempted without an authenticated identity (guardrail Rule 3). |
+| `Waffle\Commons\Contracts\Data\Repository\RepositoryInterface` | The Stateless Repository Layer (RFC-022 §3), `@template T of object`: `find(QueryInterface): list<T>`, `findOne(QueryInterface): T|null`, `stream(QueryInterface): Generator<int, T>` (the §4.1 buffer-streaming path). No Active Record, no Unit of Work, no Identity Map. |
+| `Waffle\Commons\Contracts\Data\Repository\WritableRepositoryInterface` | `extends RepositoryInterface` — the CRUD write surface: `save(object): void` (INSERT on null identity, UPDATE/upsert otherwise), `delete(object): void`, `findById(int\|string): ?T`. Implemented by all seven `waffle-commons/data` repositories. |
+| `Waffle\Commons\Contracts\Data\Mapper\DataMapperInterface` | Pure Data Mapper (`@template T of object`) between an immutable entity and its flat storage row: `target()`, `identityField()`, `fields(): list<string>`, `identify(T): int\|string\|null`, `toRow(T): array<string, scalar\|null>`. Keeps entities free of persistence logic (no Active Record). |
+| `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface` | *Added in Beta-3.* CLI-side artifact warmer behind `bin/waffle data:warmup`: `warmUp(): list<string>` pre-compiles expensive artifacts (SQR trees, routing tables) into PHP cache files primed into OPcache shared memory. Implementations must be stateless and idempotent — warming never runs during an HTTP request. |
+
+### The SQR vocabulary (`Contracts\Data\Query` + `Contracts\Data\Enum`)
+
+The Semantic Query Representation (RFC-022 §3.1) is the shared language between repositories and every driver compiler. The read-side contracts are **PHP 8.4+ interface properties** (`public string $field { get; }`) — satisfied by `readonly` / `private(set)` implementations, no legacy getters:
+
+| Contract | Surface |
+| :--- | :--- |
+| `Waffle\Commons\Contracts\Data\Query\QueryInterface` | `array $fields { get; }`, `?string $from { get; }`, `array $criteria { get; }`, `array $orderings { get; }`, `?int $limit { get; }`, `?int $offset { get; }` — immutable, compiler-agnostic, I/O-free. |
+| `Waffle\Commons\Contracts\Data\Query\ComparisonInterface` | `string $field { get; }`, `Operator $operator { get; }`, `array $values { get; }` (always a list — set and scalar operators share one shape; values are bound, never interpolated). |
+| `Waffle\Commons\Contracts\Data\Query\OrderInterface` | `string $field { get; }`, `Direction $direction { get; }`. |
+| `Waffle\Commons\Contracts\Data\Enum\Operator: string` | `Equal '='` … `Like 'LIKE'` (nine cases); `isSetOperator(): bool`. **Relocated in Beta-3** from `Waffle\Commons\Data\Query\Operator` (⚠️ BC: update imports). |
+| `Waffle\Commons\Contracts\Data\Enum\Direction: string` | `Ascending 'ASC'`, `Descending 'DESC'`. **Relocated in Beta-3** from `Waffle\Commons\Data\Query\Direction` (⚠️ BC). |
+
+See [data.md](data.md) for the concrete implementations.
 
 ## Event dispatching (PSR-14)
 
@@ -262,7 +302,7 @@ final readonly class Dto {}
 
 Plus enums:
 
-- `Waffle\Commons\Contracts\Console\Enum\ExitCode` — `SUCCESS = 0`, `FAILURE = 1`, `USAGE = 2`, …
+- `Waffle\Commons\Contracts\Console\Enum\ExitCode` — `SUCCESS = 0`, `FAILURE = 1`, `USAGE = 64`, `DATA_ERR = 65`, `NO_INPUT = 66`, `NO_PERM = 77`, `CONFIG = 78` (BSD `sysexits(3)`); plus `isSuccess()` / `isFailure()`.
 - `Waffle\Commons\Contracts\Console\Enum\Verbosity` — `QUIET`, `NORMAL`, `VERBOSE`, `VERY_VERBOSE`, `DEBUG`.
 
 ## Runtime
@@ -273,6 +313,14 @@ The contract `WaffleRuntime` implements. Its single non-constructor method is:
 
 ```php
 public function loop(KernelInterface $kernel, int $maxRequests = 500): void;
+```
+
+### `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`
+
+Contract for running an external audit script and streaming its output (consumed by the `igor:audit` console command; concrete `ProcessAuditRunner` lives in `waffle-commons/runtime`). Executes the script without a shell and reports each line to a `Closure`:
+
+```php
+public function run(string $scriptPath, string $workingDirectory, array $arguments, Closure $onLine): int;
 ```
 
 ## System / Service
@@ -286,7 +334,7 @@ interface ResettableInterface
 }
 ```
 
-Implemented by anything that needs per-request reset under FrankenPHP worker mode (Container, internal Kernel state, custom services).
+Implemented by anything that needs per-request reset under FrankenPHP worker mode (Container, internal Kernel state, the data layer's `PDOConnectionPool`, custom services).
 
 ### `Waffle\Commons\Contracts\System\SystemInterface`
 

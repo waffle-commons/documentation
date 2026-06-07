@@ -1,6 +1,6 @@
 # Routing Reference (`waffle-commons/routing`)
 
-> **Release:** `v0.1.0-beta2`
+> **Release:** `0.1.0-beta3`
 
 Attribute-driven router. Routes live next to the controller code via the `#[Route]` attribute; the `RouteDiscoverer` scans the configured controller directory at boot time and the compiled table is cached.
 
@@ -145,7 +145,7 @@ final class AppController
     public function show(int $id): array { /* ... */ }
 }
 
-// EcoShield Gateway forward: a multi-segment catch-all that ONLY matches when no
+// Edge-gateway forward: a multi-segment catch-all that ONLY matches when no
 // higher-priority route claimed the URI. `{forwarded:.*}` spans every remaining
 // segment, and the negative priority guarantees it sits at the tail of the table.
 #[Route(path: '/', name: 'gateway', priority: -1000)]

@@ -1,6 +1,6 @@
 # Runtime Reference (`waffle-commons/runtime`)
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 
 The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
 
@@ -87,3 +87,117 @@ A kernel passed to `WaffleRuntime::loop()` must:
 - Hold **no per-request mutable state** on the kernel object itself (use the container or request attributes for that).
 
 The framework's `Waffle\Abstract\AbstractKernel` satisfies all three.
+
+## Memory-neutrality gate — Igor-PHP (`ΔM = 0`)
+
+The worker-mode safety contract above is enforced **statically** by **Igor-PHP**, an
+ultra-fast Go linter purpose-built for FrankenPHP worker mode. It is Waffle's primary
+memory-neutrality gate: it parses the AST (it never executes the code) and rejects the
+patterns that break the `ΔM = 0` invariant before they reach a resident worker.
+
+**What it catches**
+
+- **Persistent state mutation** — `static::$prop`, `$this->items[] = …` and similar
+  writes that accumulate in RAM across requests.
+- **Incomplete reset** — a service that implements
+  `Waffle\Commons\Contracts\Service\ResettableInterface` but leaves a mutable property
+  unset in `reset()`, leaking state from request *N* into request *N+1*.
+- **Dangerous global access** — superglobals (`$_GET`, `$_SERVER`, …), `exit`/`die`,
+  and ambient mutations such as `date_default_timezone_set()` that poison the process
+  (forbidden by the statelessness mandate).
+
+> **Symfony note:** Igor's automatic container-service audit targets Symfony projects.
+> Waffle is not Symfony, so that auto-discovery does not apply; Igor still performs its
+> framework-agnostic static mutation / reset / global-access analysis on our source.
+
+**Install (in Docker), like every other gate**
+
+```bash
+docker exec -it -w /waffle-commons/runtime waffle-dev composer require --dev igor-php/igor-php
+```
+
+**Run before pushing** — mandatory for any change to memory-sensitive components
+(`runtime`, `container`, `pipeline`):
+
+```bash
+docker exec -it -w /waffle-commons/runtime waffle-dev composer igor
+# or, locally inside the component root:
+./bin/run-igor.sh
+```
+
+**Zero baselines.** Per the Mago Purge Protocol, Igor findings are fixed, not
+suppressed — do **not** commit an Igor baseline. Configuration lives in
+`runtime/igor.json`; the full install and violation-resolution guide is
+`runtime/igor_local_setup.md`.
+
+## `igor:audit` execution engine
+
+The audit is also exposed from the application console as **`igor:audit`** (the thin
+`Waffle\Commons\Console\Command\MemoryAuditCommand`). Per the "every component depends
+only on `waffle-commons/contracts`" rule, the command depends on the contract
+`Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`, while the OS-level execution
+lives here in `runtime` — exactly as `db:migrate` consumes `MigrationRunnerInterface`
+with the concrete in `data`.
+
+```php
+namespace Waffle\Commons\Contracts\Runtime; // contracts/src/Runtime/AuditRunnerInterface.php
+
+interface AuditRunnerInterface
+{
+    /**
+     * @param list<string> $arguments               flags forwarded to the script (e.g. ['--local'])
+     * @param Closure(string $line, bool $isError): void $onLine
+     */
+    public function run(string $scriptPath, string $workingDirectory, array $arguments, Closure $onLine): int;
+}
+```
+
+The concrete adapter runs the script with `proc_open` (no shell — argv array form, so
+none of the lint-banned `exec`/`system`/`shell_exec`/`passthru` helpers are touched) and
+streams stdout/stderr line-by-line as the audit runs:
+
+```php
+namespace Waffle\Commons\Runtime\Audit; // runtime/src/Audit/ProcessAuditRunner.php
+
+readonly class ProcessAuditRunner implements AuditRunnerInterface
+{
+    public const int READ_CHUNK = 8192;          // typed class constants
+    public const int SELECT_TIMEOUT_US = 200_000;
+    public const int EXIT_CANNOT_EXECUTE = 127;
+    // run(): proc_open + non-blocking stream_select line streaming
+}
+```
+
+The argv is modelled by a hooked value object showcasing the PHP 8.5 baseline — a typed
+class constant, a validating `set` property hook (throws a domain `ValidationException`),
+and asymmetric visibility (`public private(set)`). A class with a writable hook cannot be
+`readonly`, so it is a `final class`:
+
+```php
+namespace Waffle\Commons\Runtime\Audit; // runtime/src/Audit/IgorAuditConfig.php
+
+final class IgorAuditConfig
+{
+    public const string SHELL = 'bash';
+
+    public string $scriptPath {
+        set(string $value) {
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                throw new ValidationException('The audit script path must not be empty.', 'scriptPath');
+            }
+            $this->scriptPath = $trimmed;
+        }
+    }
+
+    public private(set) array $arguments; // list<string>, publicly read-only
+
+    /** @return list<string> [SHELL, scriptPath, ...arguments] */
+    public function toCommand(): array;
+}
+```
+
+The application wires it in `bin/waffle`:
+`$app->add(new MemoryAuditCommand(new ProcessAuditRunner(), $repoRoot, $insideContainer));`.
+The monorepo-wide script itself is the root `igor.sh`, also runnable as `wfl igor` — see
+the devops how-to [Run checks across components](../../docs/how-to/run-checks-across-components.md#the-memory-neutrality-gate-igor-php).

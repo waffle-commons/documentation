@@ -1,6 +1,6 @@
-# Waffle Components Reference (Beta-2)
+# Waffle Components Reference (Beta-3)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem at the `v0.1.0-beta2` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the in-progress `v0.1.0-beta3` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |
@@ -11,21 +11,30 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Routing** | `waffle-commons/routing` | `#[Route]` attribute router with route cache. | [routing.md](routing.md) |
 | **Pipeline** | `waffle-commons/pipeline` | PSR-15 middleware stack and request handler. | [pipeline.md](pipeline.md) |
 | **Security** | `waffle-commons/security` | Fail-closed ABAC engine, `#[Rule]` / `#[Voter]` / `#[PublicAccess]` attributes, stateless HMAC CSRF with `WAFFLE_SID` binding, `AnonymousSessionMiddleware`. | [security.md](security.md) |
+| **Auth** | `waffle-commons/auth` | Universal Authentication Bridge (RFC-021): OAuth2/OIDC + JWT (HS256/RS256, JWKS) + `X-Wfl-Assert-User` gateway assertions + API key/Basic, inbound middleware + outbound PSR-18 `AuthenticatedClient`; fail-closed, resettable `SecurityContext`. | [auth.md](auth.md) |
 | **HTTP Client** | `waffle-commons/http-client` | PSR-18 cURL client with `CURLOPT_PROTOCOLS` SSRF allowlist (HTTP/HTTPS only). | [http-client.md](http-client.md) |
 | **Container** | `waffle-commons/container` | PSR-11 container with autowiring and `ResettableInterface` for worker-mode reset. | [container.md](container.md) |
 | **Event Dispatcher** | `waffle-commons/event-dispatcher` | PSR-14 dispatcher and listener provider; `#[AsEventListener]` discovery. | [event-dispatcher.md](event-dispatcher.md) |
 | **Log** | `waffle-commons/log` | PSR-3 `StreamLogger` (JSON, stdout/stderr), `LogChannel` enum-style constants. | [log.md](log.md) |
 | **Cache** | `waffle-commons/cache` | PSR-6 + PSR-16 adapters: `ArrayCache`, `FileCache`, `RedisCache`, with stampede protection. | [cache.md](cache.md) |
-| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`. | [console.md](console.md) |
+| **Data** | `waffle-commons/data` | Worker-safe persistence (RFC-022): `PDOConnectionPool`, backend-agnostic query AST (SQR), compilers for all six SQL dialects + Firestore/MongoDB/key-value/Cassandra/GraphQL, seven typed stateless repositories with the full CRUD write surface (`WritableRepositoryInterface` + `DataMapperInterface`), live Redis/Mongo/PSR-18 drivers, atomic flat-file JSON store, property-hook hydrator, `db:migrate` migration runner, `data:warmup` OPcache warmer. | [data.md](data.md) |
+| **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `db:migrate`, `igor:audit`, `data:warmup`, and the nine `make:*` scaffolding makers (RFC-020). | [console.md](console.md) |
 | **Config** | `waffle-commons/config` | Native YAML (ext-yaml) configuration loader with strict typing. | [config.md](config.md) |
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
-| **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
+| **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `Assert` (validation & cleansing), `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
 
 ## Developer tooling
 
 | Tool | Description | Reference |
 | :--- | :--- | :--- |
 | **`wfl`** | Host-side developer CLI (`bin/wfl`) wrapping Docker / Composer / Mago / PHPUnit: lifecycle, per-component `mago` / `tests`, local component linking (`wfl link <consumer> <provider>`), and PHP debug/bench profile switching. | [wfl.md](wfl.md) |
+| **Igor-PHP** | Worker-mode memory-neutrality gate — a static `ΔM = 0` audit (state mutation, incomplete `reset()`, dangerous globals) wired into the resident-state components (`runtime`, `container`, `data`, `security`, …). Run per component as `composer igor`, monorepo-wide as `./igor.sh` / `wfl igor`, or from the app console as `igor:audit` (engine in `runtime`). | [runtime.md](runtime.md) |
+
+## Beta-3 data & persistence additions
+
+Beta-3 introduces the **`waffle-commons/data`** component (RFC-022) — a worker-safe, ORM-free persistence layer — and the contracts that support it: `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface`, `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface`, and `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
+
+The Beta-3 cycle then completes the RFC-022 surface: the SQR vocabulary moves into contracts (`Contracts\Data\Enum\{Operator, Direction}` — ⚠️ relocated from `Waffle\Commons\Data\Query` — plus the `QueryInterface` / `ComparisonInterface` / `OrderInterface` property-interfaces) together with the **Stateless Repository Layer contract** (`Contracts\Data\Repository\RepositoryInterface`: `find` / `findOne` / `stream`). The data component gains all six relational dialects (MySQL, MariaDB, SQLite, MSSQL, **PostgreSQL**, Oracle), compilers for MongoDB / key-value (Redis, DynamoDB) / Cassandra (CQL) / GraphQL, the atomic flat-file JSON store, seven typed repositories — every one implementing the **CRUD write surface** (`Contracts\Data\Repository\WritableRepositoryInterface`: `save` / `delete` / `findById`, through pure `Contracts\Data\Mapper\DataMapperInterface` mappers; the `FirestoreRepository` is auth-gated by the three guardrails) — and live drivers (`RedisKeyValueClient`, `MongoDriverSession`, the PSR-18 `GraphQLExecutor`; the CQL transport is an injectable port — no maintained PHP 8.5 native client exists). The workspace sandbox ships `waffle-postgres` and `waffle-mongo` services for end-to-end verification. See [Explanation: The Universal Data & Persistence Layer](../explanation/data-persistence.md). The `console` component gains the **`db:migrate`** command — it lives in `console` and depends only on the contracts interface, so no new dependency edge is introduced; the application wires the concrete `MigrationRunner` in its `bin/waffle`. The same arrangement powers the new **`data:warmup`** command (`Contracts\Data\Warmup\DataWarmerInterface` → `data`'s `QueryWarmer`: pre-compiled SQR artifacts primed into OPcache shared memory) and the persistence makers **`make:entity`** / **`make:repository`** (entity + repository/mapper scaffolding, RFC-020). See [data.md](data.md), [console.md](console.md), [How to: Database Migrations](../how-to/database-migrations.md), and the [data CHANGELOG](../../data/CHANGELOG.md).
 
 ## Beta-2 contracts surface additions
 

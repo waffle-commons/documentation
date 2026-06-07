@@ -2,6 +2,12 @@
 
 Waffle implements a global **Attribute-Based Access Control (ABAC)** system integrated into both the Container and the HTTP Pipeline.
 
+> **Authentication vs. authorization.** This page covers **authorization** (*may you do
+> this?* — `waffle-commons/security`). Establishing *who* the caller is — OAuth2/OIDC,
+> JWT Bearer, gateway assertions, API keys — is the job of the **Universal Authentication
+> Bridge** (`waffle-commons/auth`, RFC-021): see
+> [How to Authenticate Requests](authentication.md).
+
 ## Configuring the Global Security Level
 
 The security level defines the base rigorousness of checks performed on every object instantiated by the application. Configure this in `config/app.yaml`:

@@ -15,6 +15,26 @@ myapp:
 
 `%env(VAR)%` placeholders are resolved at boot time against an **injected env registry** (`Config`'s fourth constructor argument). The registry is built by `AppKernelFactory` by merging the parsed `.env` file with the live process environment — see [Environment variables: how the merge works](#environment-variables-how-the-merge-works) below for the precedence rules.
 
+### Database configuration (RFC-022)
+
+The `waffle-commons/data` layer reads its connection settings from the `waffle.database` block. Credentials come from `DB_*` env vars; `migrations_path` (relative to the project root) tells `bin/waffle db:migrate` where to find SQL scripts:
+
+```yaml
+# config/app.yaml
+waffle:
+  database:
+    driver: 'pgsql'   # pgsql (default) | mysql/mariadb | sqlite | sqlsrv | oci
+    host: '%env(DB_HOST)%'
+    port: '%env(DB_PORT)%'
+    database: '%env(DB_NAME)%'
+    username: '%env(DB_USER)%'
+    password: '%env(DB_PASSWORD)%'
+    charset: 'utf8'   # ignored by pgsql; used by mysql/oci
+    migrations_path: 'migrations'
+```
+
+`AppKernelFactory::buildConnectionPool($config)` turns this into a `PDOConnectionPool`, building the engine-specific DSN per driver (`buildDsn()`) and an Oracle-aware ping query. In the workspace sandbox `DB_HOST` is the `waffle-postgres` compose service. See [How to: Database Migrations](database-migrations.md) and the [data reference](../reference/data.md).
+
 ## Injecting Configuration into a Service
 
 You can inject the core `ConfigInterface` into any service to access these values.

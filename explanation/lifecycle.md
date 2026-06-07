@@ -4,7 +4,7 @@ Understanding how Waffle handles a request is key to mastering the framework.
 
 ## 1. Runtime
 The `WaffleRuntime` receives the request.
-- If using **FrankenPHP**, the application stays resides memory.
+- If using **FrankenPHP**, the application stays resident in memory across requests.
 - It instantiates and boots the `Kernel`.
 
 ## 2. Kernel Boot
@@ -27,3 +27,8 @@ Before the Controller is instantiated, the **SecureContainer** validates the obj
 
 ## 6. Controller
 The Controller method executes and returns a `ResponseInterface`, which flows back through the pipeline to the client.
+
+## 7. Reset (worker mode)
+Under FrankenPHP the process does **not** die after the response — it loops back to step 1 for the next request. Any state left mutated on a shared service would survive into that next request, so the runtime releases request-scoped state every cycle: services implementing `ResettableInterface` are reset and PSR-7 resources are closed. Memory therefore stays flat across the worker's lifetime — the **zero memory-drift** invariant (`ΔM = 0`).
+
+Waffle ships **Igor-PHP** to verify `ΔM = 0` *statically*: it reports any service that mutates persistent state, forgets to reset a property, or touches a dangerous global, before that code reaches a resident worker. See the [runtime reference](../reference/runtime.md) for how to run it.

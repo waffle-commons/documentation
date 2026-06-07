@@ -8,11 +8,11 @@
 
 > [!WARNING]
 > **BETA SOFTWARE**
-> This version (`v0.1.0-beta2`) is the HTTP-correctness release on top of Beta-1's security-hardening wave. Beta-2 lands the typed `405 Method Not Allowed` contract end-to-end: `MethodNotAllowedException` in `contracts`, RFC 7231 `Allow` header emission in `error-handler`, `OPTIONS` preflight auto-answer (`204` + `Allow`) in `pipeline`'s `CoreRoutingMiddleware`, and method overloading + `HEAD ⇒ GET` fallback + deterministic `Allow` header + worker-safe PCRE pattern cache in `routing`. The Beta-1 security foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, SSRF allowlist, typed `RouteNotFoundException`) remain in place — Beta-2 is purely additive at the framework-component level. Do not use in critical production environments without an independent security audit.
+> This version (`0.1.0-beta3`) is the **identity-federation & stateless-persistence** release on top of Beta-2's HTTP-correctness wave. Beta-3 lands two new components: **`auth`** — the Universal Authentication Bridge (RFC-021: `X-Wfl-Assert-User` gateway assertions, Bearer JWT RS256/HS256, API key, HTTP Basic inbound; five outbound credential providers behind a PSR-18 decorator; stateless OAuth2/OIDC with PKCE; fail-closed on a missing `WAFFLE_AUTH_SECRET`) — and **`data`** — the Universal Data & Persistence Layer (RFC-022: worker-safe `PDOConnectionPool`, SQR query AST with compilers for six SQL dialects + Firestore/MongoDB/key-value/Cassandra/GraphQL, seven CRUD repositories, the three Firestore guardrails, `db:migrate` + `data:warmup`). The Igor-PHP memory-neutrality audit, the `make:*` persistence makers, and a reset-chain hardening pass complete the wave. The Beta-1/Beta-2 foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, SSRF allowlist, typed `405`/`404` contracts) remain in place. Do not use in critical production environments without an independent security audit.
 
-## 🎯 The Beta-2 contract
+## 🎯 The Beta-3 contract
 
-Waffle Beta-2 is built around two non-negotiable principles:
+Waffle Beta-3 is built around two non-negotiable principles:
 
 - **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes**. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
 - **🐘 PHP 8.5 Strict.** Property Hooks for DTO validation, Asymmetric Visibility (`public private(set)`) for safe state exposure, typed constants for ecosystem-wide identifiers, `final readonly` for value objects, and `#[\Override]` on every interface implementation. The `mixed` type is forbidden in component surfaces (PSR-mandated exceptions aside).
@@ -37,28 +37,35 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ### Solving a Problem?
 - [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Rule]`, `#[Voter]`, CSRF.
+- [**Authenticate Requests**](how-to/authentication.md): OAuth2/OIDC, JWT Bearer, gateway assertions, API keys — inbound + outbound (RFC-021).
 - [**Add Middleware**](how-to/middleware.md): Intercepting requests.
 - [**Manage Configuration**](how-to/configuration.md): YAML + `%env(VAR)%` placeholders.
 - [**Handle Errors**](how-to/error-handling.md): RFC 7807 JSON responses.
 - [**Use Events**](how-to/events.md): PSR-14, `#[AsEventListener]`, lifecycle events.
 - [**Routing**](how-to/routing.md): `#[Route]` and `#[Argument]`.
+- [**Validate & Cleanse Input**](how-to/validate-input.md): `Assert` inside PHP 8.5 property hooks → RFC 7807 422.
+- [**Run Database Migrations**](how-to/database-migrations.md): `waffle.database.*` config + `bin/waffle db:migrate` (RFC-022).
 - [**Work on Multiple Components Locally**](how-to/local-development-workflow.md): `wfl link` / `unlink` / `debug` / `bench`.
 
 ### Need API Details?
 - [**Security**](reference/security.md)
+- [**Auth**](reference/auth.md)
 - [**Routing**](reference/routing.md)
+- [**Data & Persistence**](reference/data.md)
 - [**`wfl` Developer CLI**](reference/wfl.md)
 - [**Index of Components**](reference/index.md)
 
 ### Under the Hood
 - [**Architecture**](explanation/architecture.md): The Component-First philosophy.
+- [**The Universal Data & Persistence Layer**](explanation/data-persistence.md): Why no ORM — SQR, per-backend compilers, stateless repositories, honest drivers (RFC-022).
 - [**The Request Lifecycle**](explanation/lifecycle.md): From index.php to Response.
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).
+- [**The Universal Authentication Bridge**](explanation/authentication-universal-bridge.md): One contract surface for every identity provider — and the zero-leak SecurityContext (RFC-021).
 - [**CSRF: Signed Double-Submit**](explanation/security-csrf-double-submit.md): Stateless HMAC + per-browser binding (Beta-1 / SEC-01).
 
 ***
 
-*Verified for Waffle Framework v0.1.0-beta2 running on PHP 8.5.5+.*
+*Verified for Waffle Framework 0.1.0-beta3 running on PHP 8.5.5+.*
 
 ***
 

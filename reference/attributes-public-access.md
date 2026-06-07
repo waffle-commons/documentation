@@ -1,6 +1,6 @@
 # `#[PublicAccess]` — Attribute Reference
 
-> **Release:** `v0.1.0-beta2` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **Diátaxis quadrant:** Reference
 > **Component:** `waffle-commons/contracts`
 > **Namespace:** `Waffle\Commons\Contracts\Security\Attribute`
