@@ -1,6 +1,6 @@
 # Waffle Components Reference (Beta-3)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the in-progress `v0.1.0-beta3` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the in-progress `0.1.0-beta3` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` (plus any explicit additions declared in its own `composer.json`).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |

@@ -1,4 +1,4 @@
-# Quick Start Guide (`v0.1.0-beta2`)
+# Quick Start Guide (`0.1.0-beta3`)
 
 Welcome to the Waffle Framework. This guide walks you through scaffolding a new project from the `waffle-commons/skeleton` template, writing your first controller, and understanding how the Kernel + Runtime fit together.
 
