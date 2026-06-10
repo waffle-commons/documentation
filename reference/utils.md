@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New: the `Assert` validation & cleansing layer
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
@@ -102,12 +102,12 @@ The surface is split into four concern families, each a trait composed into `Ass
 | :--- | :--- |
 | `StringAssertionsTrait` | `email`, `uuid`, `length`, `regex`, `notEmpty` |
 | `NumericAssertionsTrait` | `greaterThanOrEqual`, `lessThanOrEqual`, `range`, `positive` |
-| `NetworkAssertionsTrait` | `ip`, `port`, `cidr` |
-| `FileAssertionsTrait` | `exists`, `readable`, `writable` |
+| `NetworkAssertionsTrait` | `ip`, `port`, `cidr`, `isPublicIp`, `ipInCidr` |
+| `FileAssertionsTrait` | `exists`, `readable`, `writable`, `safePath`, `within` |
 
 ### Methods
 
-Each method accepts an optional trailing `?string $message` to override the default error text. Numeric methods return the number unchanged; string methods return the **normalised** value.
+Each *assertion* accepts an optional trailing `?string $message` to override the default error text. Numeric methods return the number unchanged; string methods return the **normalised** value. The two SSRF predicates (`isPublicIp`, `ipInCidr`) instead return `bool` and never throw — they are matchers, not assertions.
 
 | Method | Validates | Returns |
 | :--- | :--- | :--- |
@@ -123,11 +123,15 @@ Each method accepts an optional trailing `?string $message` to override the defa
 | `ip(string, ?string): string` | IPv4 / IPv6 | trimmed + lower-cased |
 | `port(int, ?string): int` | `1..65535` | value unchanged |
 | `cidr(string, ?string): string` | `address/prefix`, family-bounded prefix | trimmed + lower-cased |
+| `isPublicIp(string): bool` | IP is publicly routable (not loopback / RFC 1918 / RFC 4193 / link-local / CGNAT / multicast / reserved) | `bool` — fail-closed: malformed ⇒ `false` |
+| `ipInCidr(string, string): bool` | IP falls inside a CIDR block (family-aware; v4 never matches a v6 block) | `bool` |
 | `exists(string, ?string): string` | path exists | the safe (trimmed) path |
 | `readable(string, ?string): string` | path readable | the safe (trimmed) path |
 | `writable(string, ?string): string` | path writable | the safe (trimmed) path |
+| `safePath(string, ?string): string` | no `../` / `..\` traversal segment (plus null-byte / blank) | the safe (trimmed) path |
+| `within(string $base, string, ?string): string` | resolved target stays inside the existing `$base` directory | lexically-normalised absolute path |
 
-The file methods first screen each path for the **null-byte injection** vector (`\0`) and for emptiness before touching the filesystem.
+The file methods first screen each path for the **null-byte injection** vector (`\0`) and for emptiness before touching the filesystem. `safePath()` / `within()` additionally reject **directory traversal** (`../`, `..\`) so user-supplied path fragments cannot escape their intended location (SEC-05). `isPublicIp()` / `ipInCidr()` back the HTTP client's **SSRF** defence (SEC-02) — see [http-client.md](http-client.md).
 
 ### Failure: `ValidationException`
 

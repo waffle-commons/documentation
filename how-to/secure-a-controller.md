@@ -95,10 +95,10 @@ public function transferFunds(ServerRequestInterface $request): ResponseInterfac
 }
 ```
 
-Beta-1 ships a fully **stateless signed double-submit** CSRF subsystem (`Waffle\Commons\Security\Csrf\CsrfTokenManager`): tokens are self-validating `HMAC-SHA256(nonce ‖ expiresAt ‖ id ‖ sessionId)` payloads. **No PHP sessions, no cache, no Redis** — every CSRF check is a pure function of the request, the configured signing secret, and the per-browser `WAFFLE_SID` cookie issued by `AnonymousSessionMiddleware`. Two pieces of context are folded into the HMAC:
+Waffle ships a fully **stateless signed double-submit** CSRF subsystem (`Waffle\Commons\Security\Csrf\CsrfTokenManager`): tokens are self-validating `HMAC-SHA256(nonce ‖ expiresAt ‖ id ‖ principal)` payloads. **No PHP sessions, no cache, no Redis** — every CSRF check is a pure function of the request, the configured signing secret, and the binding principal resolved by `CsrfBindingResolver`. Two pieces of context are folded into the HMAC:
 
 - the **logical id** (e.g. `form:login`) — prevents cross-form replay;
-- the **anonymous session id** — prevents cross-browser replay.
+- the **binding principal** — `auth:<subject>` when authenticated, else `anon:<WAFFLE_SID>` — prevents cross-session replay. A token minted while anonymous is mathematically invalid once the session authenticates (SEC-01 session-tossing defence).
 
 Operational requirements:
 
@@ -112,7 +112,7 @@ See the [CSRF explanation page](../explanation/security-csrf-double-submit.md) f
 Canonical Beta-1 middleware order (already wired by the skeleton's `AppKernelFactory`):
 
 ```
-ErrorHandler → TrustedHost → AnonymousSession → Routing → Csrf → Security → SecureHeaders → Dispatcher
+ErrorHandler → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → SecureHeaders → Dispatcher
 ```
 
 `SecurityMiddleware` then delegates to `SecureContainer::analyze($controller, $method)`:
@@ -126,3 +126,23 @@ ErrorHandler → TrustedHost → AnonymousSession → Routing → Csrf → Secur
 `CsrfMiddleware` runs the CSRF check on actions tagged `#[RequiresCsrfToken]`, using the SID published by `AnonymousSessionMiddleware`.
 
 `SecureContainer` also wraps the PSR-11 container and applies `Security::analyze()` before every `get()` — preventing low-privilege code from pulling sensitive services.
+
+## 7. Handling file uploads safely (SEC-05)
+
+**Never** pass attacker-influenced metadata — most importantly `UploadedFileInterface::getClientFilename()` — straight into a transfer command. The client controls that value and can embed traversal sequences (`../../etc/cron.d/evil`) to escape your storage directory.
+
+`Waffle\Commons\Http\UploadedFile::moveTo()` already rejects a destination containing `../`, `..\`, or a null byte (it throws a `ValidationException`, which is an `\InvalidArgumentException`). Build the destination from a value **you** control, and confine any user-supplied fragment with `Assert`:
+
+```php
+use Waffle\Commons\Utils\Assert;
+
+// Generate the stored name yourself; never trust the client filename.
+$storedName = bin2hex(random_bytes(16)) . '.bin';
+
+// Or, if you must keep a user-supplied sub-path, confine it to a base dir:
+$target = Assert::within('/var/app/uploads', $userSuppliedSubPath); // throws if it escapes
+
+$uploadedFile->moveTo($target);
+```
+
+`Assert::safePath()` rejects any traversal segment; `Assert::within($base, $path)` additionally guarantees the resolved target stays inside `$base`. See the [Utils reference](../reference/utils.md).
