@@ -38,6 +38,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 ### Solving a Problem?
 - [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Rule]`, `#[Voter]`, CSRF.
 - [**Authenticate Requests**](how-to/authentication.md): OAuth2/OIDC, JWT Bearer, gateway assertions, API keys — inbound + outbound (RFC-021).
+- [**Configure CORS**](how-to/configure-cors.md): Fail-closed cross-origin policy, exact-origin allow-list, the `*`-with-credentials ban (SEC-04).
 - [**Add Middleware**](how-to/middleware.md): Intercepting requests.
 - [**Manage Configuration**](how-to/configuration.md): YAML + `%env(VAR)%` placeholders.
 - [**Handle Errors**](how-to/error-handling.md): RFC 7807 JSON responses.
