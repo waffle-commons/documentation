@@ -271,8 +271,8 @@ The runtime is `Waffle\Commons\Runtime\WaffleRuntime`. Its public API is:
 
 ```php
 public function __construct(
-    ?GlobalsFactory $globalsFactory = null,
-    ?ResponseEmitterInterface $emitter = null,
+    GlobalsFactoryInterface $globalsFactory,   // required — wired by the app
+    ResponseEmitterInterface $emitter,         // required — wired by the app
 );
 
 public function loop(KernelInterface $kernel, int $maxRequests = 500): void;
@@ -284,6 +284,8 @@ A complete `public/index.php`:
 <?php
 declare(strict_types=1);
 
+use Waffle\Commons\Http\Emitter\ResponseEmitter;
+use Waffle\Commons\Http\Factory\GlobalsFactory;
 use Waffle\Commons\Runtime\WaffleRuntime;
 use App\Factory\AppKernelFactory;
 
@@ -296,7 +298,8 @@ $kernel = AppKernelFactory::create(
     debug: getenv('APP_DEBUG') === 'true',
 );
 
-(new WaffleRuntime())->loop($kernel, maxRequests: 500);
+// The app wires the concrete http factory + emitter into the agnostic runtime.
+(new WaffleRuntime(new GlobalsFactory(), new ResponseEmitter()))->loop($kernel, maxRequests: 500);
 ```
 
 Under FrankenPHP worker mode, `loop()`:

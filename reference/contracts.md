@@ -202,9 +202,20 @@ interface ResponseEmitterInterface
 }
 ```
 
+### `Waffle\Commons\Contracts\Http\GlobalsFactoryInterface`
+
+```php
+interface GlobalsFactoryInterface
+{
+    public function createFromGlobals(): ServerRequestInterface;
+}
+```
+
+Builds a PSR-7 `ServerRequestInterface` from the ambient SAPI/superglobals. `WaffleRuntime` depends on this port — **not** `http`'s concrete `GlobalsFactory` — so the runtime stays within the contracts-only perimeter; the app injects the concrete.
+
 ### `Waffle\Commons\Contracts\Http\ServerRequestFactoryInterface`
 
-Framework-level factory for building a `ServerRequestInterface` from PHP superglobals (used by `WaffleRuntime`).
+Extends PSR-17's `ServerRequestFactoryInterface` (`createServerRequest(string $method, $uri)`) — the explicit-arguments request factory, distinct from the from-globals `GlobalsFactoryInterface` above.
 
 ## Security
 

@@ -50,7 +50,9 @@ $uploadedFile->moveTo($target);
 ```php
 namespace Waffle\Commons\Http\Factory;
 
-class GlobalsFactory
+use Waffle\Commons\Contracts\Http\GlobalsFactoryInterface;
+
+class GlobalsFactory implements GlobalsFactoryInterface
 {
     /**
      * @param (callable(): StreamInterface)|null $bodyStreamFactory
@@ -106,12 +108,12 @@ public function show(ResponseFactoryInterface $factory): ResponseInterface
 
 ## Integration with `WaffleRuntime`
 
-The runtime wires these classes together:
+The application wires these `http` classes into the agnostic runtime:
 
 ```php
 $runtime = new WaffleRuntime(
-    globalsFactory: new GlobalsFactory(),       // optional, defaults shown
-    emitter: new ResponseEmitter(),             // optional, defaults shown
+    globalsFactory: new GlobalsFactory(),       // required — the app supplies the concretes
+    emitter: new ResponseEmitter(),             // required — the app supplies the concretes
 );
 $runtime->loop($kernel, maxRequests: 500);
 ```
