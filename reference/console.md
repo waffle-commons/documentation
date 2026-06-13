@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; Adds the `db:migrate` command (RFC-022)
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 
@@ -35,6 +35,7 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | `Waffle\Commons\Console\Command\CacheClearCommand` | `cache:clear` | Flushes the configured `CacheInterface` backend (route cache, security tokens). |
 | `Waffle\Commons\Console\Command\RouteListCommand` | `route:list` | Renders the compiled route table. |
 | `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks controllers and prints the resolved access ladder (`#[Rule]` / `#[Voter]`). |
+| `Waffle\Commons\Console\Command\SensitiveComparisonAuditCommand` | `security:compare-audit` | *Added in Beta-4 (SEC-03).* Scans source (via `SensitiveComparisonScanner`, a `token_get_all` pass) for naive `===`/`!==` on secret/token/HMAC/signature operands that must use `hash_equals()`; returns a non-zero exit on findings. Also exposed monorepo-wide as `wfl compare-audit`. |
 | `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
 | `Waffle\Commons\Console\Command\MemoryAuditCommand` | `igor:audit` | Streams the monorepo-wide Igor memory-leak & state-mutation audit (`igor.sh`). Thin command depending only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`; the `proc_open` engine lives in `waffle-commons/runtime`. Distinct from `security:audit` (which audits ABAC/CSRF). See [§ `igor:audit`](#igoraudit) below. |
 | `Waffle\Commons\Console\Command\DataWarmupCommand` | `data:warmup` | *Added in Beta-3.* Invokes every registered `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface`: compiled artifacts (parameterised SQL from SQR trees, routing tables, …) are serialised into PHP cache files and primed into OPcache shared memory, removing compilation and disk I/O from the first live request. Idempotent and strictly CLI-side; applications wire their warmers (e.g. `data`'s `QueryWarmer`) in `bin/waffle`. See [data.md → Warmup](data.md#warmup--wafflecommonsdatawarmupquerywarmer). |

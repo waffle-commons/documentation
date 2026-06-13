@@ -1,6 +1,6 @@
 # Container Reference (`waffle-commons/container`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the dev-only state-reset compliance scanner (DIAG-02)*
 > **PSR Compliance:** PSR-11 (`Psr\Container\ContainerInterface`)
 
 A strict PSR-11 container with reflection-based autowiring, circular-dependency detection, and worker-mode reset semantics. Core services (the PSR-11 `ContainerInterface` itself) cannot be redefined after registration.

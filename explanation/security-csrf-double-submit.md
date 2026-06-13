@@ -1,6 +1,6 @@
 # CSRF: Stateless Signed Double-Submit with Per-Browser Binding
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *Architectural choice retained from Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Architectural choice retained from Beta-1*
 > **Diátaxis quadrant:** Explanation
 > **Tracks:** SEC-01 (option C — stateless HMAC + anonymous SID binding)
 
