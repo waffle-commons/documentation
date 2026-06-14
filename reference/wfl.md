@@ -44,8 +44,16 @@ If `~/.local/bin` is not on your `$PATH`, `wfl init` prints a warning telling yo
 | `wfl mago [component]` | Run `composer mago` (fmt + lint + analyze + guard) for a component. Defaults to the component inferred from your current directory. |
 | `wfl test [component]` | Run `composer tests` for a component. Defaults to the component inferred from your current directory. |
 | `wfl igor [args…]` | Run the **monorepo-wide** Igor memory-leak / shared-state audit (`igor.sh`) across every component that declares `igor-php/igor-php`. Takes no component argument; forwards all flags verbatim (`--silent`, `--local`, `-c <component>`, `-- <igor args>`). On the host it `docker exec`s each audit into `waffle-dev`; it self-detects local mode when already inside the container. |
+| `wfl compare-audit [component…]` | **SEC-03 gate.** Run the timing-safe-comparison scanner (`scripts/sec03-compare-audit.php`, reusing the unit-tested `SensitiveComparisonScanner`) that bans naive `===` / `!==` on secret/token/HMAC/signature operands which must use `hash_equals()`. No args ⇒ sweeps the security-sensitive components; otherwise the named ones. Non-zero exit on any finding. |
+| `wfl check:all [--with-tests]` | **DX-01.** Parallel static-gate sweep: runs `composer mago` (fmt+lint+analyze+guard) across every component that ships a mago script, bounded by `WFL_CHECK_JOBS` (default 4 — full fan-out exhausts file descriptors on the macOS/Docker share), and prints a green/red summary. `--with-tests` also runs `composer tests` per component. |
 
 When no component is given, `wfl` infers it from your working directory (you must be inside `<repo>/<component>/…`); otherwise it asks you to pass one explicitly.
+
+### Academy
+
+| Command | Description |
+| :--- | :--- |
+| `wfl academy:test [--lab=NAME]` | Run the Waffle Academy labs PHPUnit suite (`academy/labs`, inside the container). `--lab=NAME` (or `--lab NAME`) forwards `--filter NAME` to PHPUnit. |
 
 ### PHP profile switching
 
@@ -73,6 +81,7 @@ The active PHP profile is a symlink that `wfl` flips, then it restarts the `waff
 | `wfl unlink <consumer> <provider>` | Remove that `path` repository from `<consumer>/composer.json` and `composer update` back to the registry version. |
 | `wfl csrf-init [token-id]` | Generate a matching `WAFFLE_SID` cookie value and a signed `X-CSRF-Token` (HMAC over `nonce ‖ expiresAt ‖ id ‖ sid`) for manual API testing. Token id defaults to `_default`. Reads `WAFFLE_CSRF_SECRET` from the environment or `.env`; generates an ephemeral secret if none is found. |
 | `wfl secret-gen` | Print a fresh 32-byte (256-bit) cryptographically secure application secret, suitable for `APP_SECRET` / `WAFFLE_CSRF_SECRET`. |
+| `wfl monorepo:sync [--fix]` | **DX-01.** Report (or with `--fix`, align) the `waffle-commons/*` sibling version constraints each component declares, against the monorepo `self.version` convention (the template apps are out of scope). Read-only by default. |
 
 > **Note on `link` / `unlink`:** both take **two** arguments — the *consumer* component and the *provider* component, in that order. For example, `wfl link routing utils` makes `routing` build against your local `utils` checkout.
 

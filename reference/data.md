@@ -1,6 +1,6 @@
 # Data Reference (`waffle-commons/data`)
 
-> **Release:** `0.1.0-beta3` *(in progress)* &nbsp;|&nbsp; New component (RFC-022)
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the optional dev-only connection-tracer hook (DIAG-03)*
 > **Requires:** PHP 8.5+, `ext-pdo`, `psr/http-client`, `psr/http-factory`, `psr/http-message`. Depends only on `waffle-commons/contracts`.
 > **Suggests:** `ext-redis` (live key-value driver), `ext-mongodb` (live document driver).
 

@@ -1,6 +1,6 @@
 # Core Reference (`waffle-commons/waffle`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds typed kernel lifecycle events + interface-based response conversion (ARCH-04/05)*
 
 The framework kernel. Orchestrates the PSR-15 middleware stack, dispatches lifecycle events, and resolves controllers via the container. The kernel itself stays agnostic of routing, security, logging, and HTTP — every concrete dependency is injected.
 

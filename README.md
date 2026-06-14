@@ -8,11 +8,11 @@
 
 > [!WARNING]
 > **BETA SOFTWARE**
-> This version (`0.1.0-beta3`) is the **identity-federation & stateless-persistence** release on top of Beta-2's HTTP-correctness wave. Beta-3 lands two new components: **`auth`** — the Universal Authentication Bridge (RFC-021: `X-Wfl-Assert-User` gateway assertions, Bearer JWT RS256/HS256, API key, HTTP Basic inbound; five outbound credential providers behind a PSR-18 decorator; stateless OAuth2/OIDC with PKCE; fail-closed on a missing `WAFFLE_AUTH_SECRET`) — and **`data`** — the Universal Data & Persistence Layer (RFC-022: worker-safe `PDOConnectionPool`, SQR query AST with compilers for six SQL dialects + Firestore/MongoDB/key-value/Cassandra/GraphQL, seven CRUD repositories, the three Firestore guardrails, `db:migrate` + `data:warmup`). The Igor-PHP memory-neutrality audit, the `make:*` persistence makers, and a reset-chain hardening pass complete the wave. The Beta-1/Beta-2 foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, SSRF allowlist, typed `405`/`404` contracts) remain in place. Do not use in critical production environments without an independent security audit.
+> This version (`0.1.0-beta4`) is the **security-hardening & worker-mode-stability** release — the RC-readiness groundwork on top of Beta-3's identity-federation & stateless-persistence wave. Beta-4 closes the core security gaps (session-fixation rotation + cryptographic CSRF binding, **default-on** SSRF resolve→validate→pin with an internal allowlist, timing-safe comparison enforcement, **fail-closed CORS**, and path-traversal guardrails), hardens the architecture for resident-worker mode (typed kernel lifecycle events, stream-resource ownership, an interface-based response converter, a standalone uploaded-files normalizer), and adds worker-mode **diagnostics** (a boot-time state-reset compliance scanner and a dev-only orphaned-connection tracer for PDO/Redis/streams) plus developer-experience tooling (`wfl check:all` / `monorepo:sync`, native `mb_trim`, a mockable `ValidatorInterface`); the `wfl igor` worker-safety audit stays a 0-KO gate. Beta-3's `auth` (Universal Authentication Bridge, RFC-021) and `data` (Universal Data & Persistence Layer, RFC-022) components — and the Beta-1/Beta-2 foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, typed `405`/`404` contracts) — all remain in place. Do not use in critical production environments without an independent security audit.
 
-## 🎯 The Beta-3 contract
+## 🎯 The Beta-4 contract
 
-Waffle Beta-3 is built around two non-negotiable principles:
+Waffle Beta-4 is built around two non-negotiable principles:
 
 - **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes**. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
 - **🐘 PHP 8.5 Strict.** Property Hooks for DTO validation, Asymmetric Visibility (`public private(set)`) for safe state exposure, typed constants for ecosystem-wide identifiers, `final readonly` for value objects, and `#[\Override]` on every interface implementation. The `mixed` type is forbidden in component surfaces (PSR-mandated exceptions aside).
@@ -38,6 +38,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 ### Solving a Problem?
 - [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Rule]`, `#[Voter]`, CSRF.
 - [**Authenticate Requests**](how-to/authentication.md): OAuth2/OIDC, JWT Bearer, gateway assertions, API keys — inbound + outbound (RFC-021).
+- [**Configure CORS**](how-to/configure-cors.md): Fail-closed cross-origin policy, exact-origin allow-list, the `*`-with-credentials ban (SEC-04).
 - [**Add Middleware**](how-to/middleware.md): Intercepting requests.
 - [**Manage Configuration**](how-to/configuration.md): YAML + `%env(VAR)%` placeholders.
 - [**Handle Errors**](how-to/error-handling.md): RFC 7807 JSON responses.
@@ -65,7 +66,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ***
 
-*Verified for Waffle Framework 0.1.0-beta3 running on PHP 8.5.5+.*
+*Verified for Waffle Framework 0.1.0-beta4 running on PHP 8.5.5+.*
 
 ***
 

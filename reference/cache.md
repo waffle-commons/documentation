@@ -1,6 +1,6 @@
 # Cache Reference (`waffle-commons/cache`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the optional dev-only connection-tracer hook (DIAG-03)*
 > **PSR Compliance:** PSR-6 (`Psr\Cache\CacheItemPoolInterface`), PSR-16 (`Psr\SimpleCache\CacheInterface`)
 
 PSR-6 + PSR-16 cache implementation tuned for FrankenPHP worker mode. Every adapter is stateless across requests, fail-secure, and zero-baseline under Mago.
@@ -36,6 +36,10 @@ Backend identifiers — exact constants from `Waffle\Commons\Contracts\Cache\Con
 | `Constant::BACKEND_REDIS` | `RedisCache` | — | `dsn: string` (default `redis://localhost:6379`), `prefix: string`, `default_ttl: int` |
 
 Unknown identifier → `\InvalidArgumentException`. Backend construction failure → `Waffle\Commons\Cache\Exception\CacheBackendUnavailableException`.
+
+## Connection tracing (DIAG-03)
+
+`CacheFactory` accepts an optional dev-only `?Waffle\Commons\Contracts\Data\Connection\ConnectionTrackerInterface`; when present it is threaded into `RedisCache`, which registers its client (`ConnectionKind::Redis`) so the runtime's orphaned-connection tracer can report a Redis socket still open at request end. In production the tracker is `null` and the hook is a zero-cost no-op. See [runtime.md → Orphaned-connection tracer](runtime.md#orphaned-connection-tracer--connectiontracker-diag-03).
 
 ## Key validation
 

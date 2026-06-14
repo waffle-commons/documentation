@@ -1,6 +1,6 @@
 # Runtime Reference (`waffle-commons/runtime`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the dev-only orphaned-connection tracer (DIAG-03)*
 
 The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
 
@@ -10,34 +10,33 @@ The application runner. `WaffleRuntime` owns the request loop under FrankenPHP w
 namespace Waffle\Commons\Runtime;
 
 use Waffle\Commons\Contracts\Core\KernelInterface;
+use Waffle\Commons\Contracts\Http\GlobalsFactoryInterface;
 use Waffle\Commons\Contracts\Http\ResponseEmitterInterface;
 use Waffle\Commons\Contracts\Runtime\RuntimeInterface;
-use Waffle\Commons\Http\Emitter\ResponseEmitter;
-use Waffle\Commons\Http\Factory\GlobalsFactory;
 
 final class WaffleRuntime implements RuntimeInterface
 {
     public function __construct(
-        ?GlobalsFactory $globalsFactory = null,        // defaults to new GlobalsFactory()
-        ?ResponseEmitterInterface $emitter = null,     // defaults to new ResponseEmitter()
+        GlobalsFactoryInterface $globalsFactory,   // required — wired by the app bootstrap
+        ResponseEmitterInterface $emitter,         // required — wired by the app bootstrap
     );
 
     public function loop(KernelInterface $kernel, int $maxRequests = 500): void;
 }
 ```
 
-The runtime contains **no concrete framework dependencies** beyond `GlobalsFactory` and `ResponseEmitter` (which themselves depend only on the http and contracts packages).
+The runtime contains **no concrete framework dependencies at all** — it depends only on `contracts` interfaces (`GlobalsFactoryInterface`, `ResponseEmitterInterface`, `KernelInterface`), so `runtime` requires only `waffle-commons/contracts`. The concrete `GlobalsFactory` / `ResponseEmitter` (from `http`) are injected by the application bootstrap.
 
-> **STAB-01 (Beta-1):** the application-side `AppKernelFactory` no longer holds a `public static GlobalsFactory $globalsFactory` — that static persisted across worker requests and made cross-request contamination possible. `WaffleRuntime` already defaults to creating its own per-process `GlobalsFactory` when none is passed, so `new WaffleRuntime()` is the canonical call from `public/index.php`.
+> **STAB-01 (Beta-1):** the application-side `AppKernelFactory` no longer holds a `public static GlobalsFactory $globalsFactory` — that static persisted across worker requests and made cross-request contamination possible. The factory and emitter are instead **injected per process** at the bootstrap; the canonical call from `public/index.php` is `new WaffleRuntime(new GlobalsFactory(), new ResponseEmitter())`.
 
 ## `loop()` semantics
 
 1. **Boot once** — `$kernel->boot()->configure()` runs exactly once when the FrankenPHP worker starts.
 2. **Iterate** — up to `$maxRequests` times:
    - Under FrankenPHP: calls `frankenphp_handle_request($handler)` where `$handler`:
-     - rebuilds a PSR-7 `ServerRequestInterface` from the (FrankenPHP-repopulated) superglobals via `GlobalsFactory::createFromGlobals()`,
+     - rebuilds a PSR-7 `ServerRequestInterface` from the (FrankenPHP-repopulated) superglobals via the injected `GlobalsFactoryInterface::createFromGlobals()`,
      - calls `$kernel->handle($request)`,
-     - emits the response via `ResponseEmitter::emit()`.
+     - emits the response via the injected `ResponseEmitterInterface::emit()`.
    - Under classic SAPI: invokes `$handler` once and exits the loop.
 3. **GC** — every 50 requests, `gc_collect_cycles()` is called to keep long-running worker memory bounded.
 4. **Reset on exit** — when the loop exits (max reached or FrankenPHP signaled stop), `$kernel->reset()` clears request-scoped state.
@@ -48,6 +47,8 @@ The runtime contains **no concrete framework dependencies** beyond `GlobalsFacto
 <?php
 declare(strict_types=1);
 
+use Waffle\Commons\Http\Emitter\ResponseEmitter;
+use Waffle\Commons\Http\Factory\GlobalsFactory;
 use Waffle\Commons\Runtime\WaffleRuntime;
 use App\Factory\AppKernelFactory;
 
@@ -60,7 +61,8 @@ $kernel = AppKernelFactory::create(
     debug: getenv('APP_DEBUG') === 'true',
 );
 
-(new WaffleRuntime())->loop($kernel, maxRequests: 500);
+// The app wires the concrete http factory + emitter into the agnostic runtime.
+(new WaffleRuntime(new GlobalsFactory(), new ResponseEmitter()))->loop($kernel, maxRequests: 500);
 ```
 
 ## FrankenPHP / classic SAPI auto-detection
@@ -87,6 +89,27 @@ A kernel passed to `WaffleRuntime::loop()` must:
 - Hold **no per-request mutable state** on the kernel object itself (use the container or request attributes for that).
 
 The framework's `Waffle\Abstract\AbstractKernel` satisfies all three.
+
+## Orphaned-connection tracer — `ConnectionTracker` (DIAG-03)
+
+A **dev-only** diagnostic that flags connections opened during a request but never released by the time the middleware stack unwinds. It implements `Waffle\Commons\Contracts\Data\Connection\ConnectionTrackerInterface` (which `extends ResettableInterface`) and is request-scoped — `reset()` clears its registry on every worker loop.
+
+```php
+namespace Waffle\Commons\Runtime\Trace; // runtime/src/Trace/ConnectionTracker.php
+
+final class ConnectionTracker implements ConnectionTrackerInterface, ResettableInterface
+{
+    public function trackOpen(string $id, ConnectionKind $kind): void;
+    public function trackClose(string $id): void;
+    /** @return list<array{id: string, kind: ConnectionKind}> */
+    public function openConnections(): array;
+    public function reset(): void; // clears the registry between requests
+}
+```
+
+The tracker is wired **only in development** (the app factory passes `null` in prod, so every `?->` hook is a no-op at zero cost). Connection owners report into it — `data`'s `PDOConnectionPool` (`ConnectionKind::Pdo`), `cache`'s `RedisCache` (`ConnectionKind::Redis`), and `http`'s `Stream` (`ConnectionKind::Stream`). `waffle`'s `OrphanedConnectionListener` reads `openConnections()` on `TerminateEvent`, emitting a PSR-3 `warning` for a still-open pooled PDO connection (a real leak) and an `info` for the persistent Redis client / in-memory streams.
+
+> The class lists `implements ConnectionTrackerInterface, ResettableInterface` **directly** — `wfl igor` does a shallow scan, so inheriting `ResettableInterface` only transitively through the tracker interface would not satisfy the worker-safety gate.
 
 ## Memory-neutrality gate — Igor-PHP (`ΔM = 0`)
 
@@ -182,7 +205,7 @@ final class IgorAuditConfig
 
     public string $scriptPath {
         set(string $value) {
-            $trimmed = trim($value);
+            $trimmed = mb_trim($value);
             if ($trimmed === '') {
                 throw new ValidationException('The audit script path must not be empty.', 'scriptPath');
             }

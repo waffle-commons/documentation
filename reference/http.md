@@ -1,6 +1,6 @@
 # HTTP Reference (`waffle-commons/http`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; New: `UploadedFile::moveTo()` path-traversal guard (SEC-05); opt-in stream tracing (DIAG-03)
 > **PSR Compliance:** PSR-7 (HTTP Messages), PSR-17 (HTTP Factories)
 
 Strict, immutable PSR-7/17 implementation tuned for FrankenPHP worker mode. No singletons, no superglobal touching outside the explicit `GlobalsFactory`. The `ResponseEmitter` reads response bodies in 8 KiB chunks to keep large payload streaming memory-bounded.
@@ -28,12 +28,31 @@ Strict, immutable PSR-7/17 implementation tuned for FrankenPHP worker mode. No s
 | `Waffle\Commons\Http\Factory\UriFactory` | `createUri()` |
 | `Waffle\Commons\Http\Factory\UploadedFileFactory` | `createUploadedFile()` |
 
+## Secure file uploads (SEC-05)
+
+`UploadedFile::moveTo($target)` screens its destination through
+[`Assert::safePath()`](utils.md) before touching the filesystem: a target containing a
+directory-traversal segment (`../`, `..\`) or a null byte is rejected, so a crafted
+upload cannot escape its intended directory.
+
+**Never build that target from raw client metadata.** `getClientFilename()` and
+`getClientMediaType()` are attacker-controlled — treat them as display labels only.
+Derive the stored name yourself (e.g. a generated id) and, when you must keep a
+caller-supplied fragment, confine it with [`Assert::within($baseDir, $fragment)`](utils.md):
+
+```php
+$target = Assert::within($uploadDir, bin2hex(random_bytes(16)) . '.bin');
+$uploadedFile->moveTo($target);
+```
+
 ## `GlobalsFactory` — building a PSR-7 ServerRequest
 
 ```php
 namespace Waffle\Commons\Http\Factory;
 
-class GlobalsFactory
+use Waffle\Commons\Contracts\Http\GlobalsFactoryInterface;
+
+class GlobalsFactory implements GlobalsFactoryInterface
 {
     /**
      * @param (callable(): StreamInterface)|null $bodyStreamFactory
@@ -89,12 +108,12 @@ public function show(ResponseFactoryInterface $factory): ResponseInterface
 
 ## Integration with `WaffleRuntime`
 
-The runtime wires these classes together:
+The application wires these `http` classes into the agnostic runtime:
 
 ```php
 $runtime = new WaffleRuntime(
-    globalsFactory: new GlobalsFactory(),       // optional, defaults shown
-    emitter: new ResponseEmitter(),             // optional, defaults shown
+    globalsFactory: new GlobalsFactory(),       // required — the app supplies the concretes
+    emitter: new ResponseEmitter(),             // required — the app supplies the concretes
 );
 $runtime->loop($kernel, maxRequests: 500);
 ```

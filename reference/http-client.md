@@ -1,6 +1,6 @@
 # HTTP Client Reference (`waffle-commons/http-client`)
 
-> **Release:** `0.1.0-beta3` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; SEC-02 SSRF guard (resolve → validate → pin)
 > **PSR Compliance:** PSR-18 (`Psr\Http\Client\ClientInterface`), consumes PSR-7 messages, PSR-17 factories
 
 A high-performance PSR-18 HTTP client tuned for FrankenPHP resident-worker proxying. Holds a persistent `\CurlHandle` and `\CurlMultiHandle`, reused via `curl_reset()` across every `sendRequest()` so libcurl's DNS cache and keep-alive pool stay warm. The transfer is driven through the multi interface (`curl_multi_exec` + `curl_multi_select`) rather than the blocking `curl_exec()`, so the worker parks on a socket-level wait instead of busy-spinning. Bodies stream in 8 KiB chunks **in both directions** — request bodies are pulled from the PSR-7 request stream, response bodies pushed into a PSR-7 stream — so neither is materialised whole in worker memory.
@@ -19,6 +19,7 @@ final readonly class Client implements ClientInterface
     public function __construct(
         private ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface   $streamFactory,
+        private ?SsrfGuard               $ssrfGuard = null, // SEC-02: opt-in SSRF defence
     );
 
     public function sendRequest(RequestInterface $request): ResponseInterface;
@@ -35,6 +36,22 @@ CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
 ```
 
 This blocks SSRF pivots via `file://`, `gopher://`, `dict://`, `ldap://`, `telnet://`, … even when a caller-supplied URL or a server-supplied `Location` header tries to switch protocols mid-flight.
+
+## SEC-02 — SSRF guard (resolve → validate → pin)
+
+When a `Waffle\Commons\HttpClient\Security\SsrfGuard` is injected, every `sendRequest()` resolves the target host, asserts that **every** resolved IP is publicly routable, and pins the vetted address into the transport via `CURLOPT_RESOLVE` — *before* any socket is opened. A non-public resolution throws `SsrfException` (a PSR-18 `RequestExceptionInterface`), fail-closed.
+
+```php
+use Waffle\Commons\HttpClient\Client;
+use Waffle\Commons\HttpClient\Security\SsrfGuard;
+
+$client = new Client($psr17, $psr17, new SsrfGuard()); // default SystemHostResolver
+```
+
+- **Validation:** `Assert::isPublicIp()` rejects loopback / RFC 1918 / RFC 4193 / link-local / CGNAT / multicast / reserved ranges (IPv4 + IPv6, incl. IPv4-mapped). If *any* resolved IP is non-public the request is refused — defeating a DNS-rebinding record that mixes a public and a private answer.
+- **Pinning (TOCTOU defence):** the vetted IP is pinned with `CURLOPT_RESOLVE` so libcurl reuses exactly the address that was validated — closing the time-of-check/time-of-use gap between the DNS check and the connection. Combined with `CURLOPT_FOLLOWLOCATION => false` (redirects never auto-followed), there is no unvalidated hop.
+- **Host resolution** is abstracted behind `HostResolverInterface`; the default `SystemHostResolver` uses `gethostbynamel()` and short-circuits literal IPs. Supply a caching / DoH resolver if needed.
+- **Opt-in:** the guard is **not** enabled by default — the framework's own internal service-to-service calls (e.g. the auth bridge's outbound assertion propagation) legitimately target private addresses. Enable it on clients that dispatch **user-influenced** URLs.
 
 ## Hardcoded cURL defaults
 
@@ -73,6 +90,7 @@ The client enforces a security baseline that callers cannot lower:
 | `HttpClientException` | `RuntimeException` | `ClientExceptionInterface` | cURL handle could not be allocated. |
 | `NetworkException` | `HttpClientException` | `NetworkExceptionInterface` | Transport failure: DNS, connect timeout, read timeout, TLS error, peer reset, partial-file, send/recv error. |
 | `RequestException` | `HttpClientException` | `RequestExceptionInterface` | Protocol-level failure (malformed URL, empty response) or any non-network cURL error. |
+| `SsrfException` | `HttpClientException` | `RequestExceptionInterface` | The SSRF guard refused the target host (missing, unresolvable, or a non-public IP). |
 
 The client uses libcurl errno → PSR-18 mapping in `Client::mapCurlError()`. The full list of "network" errnos: `CURLE_COULDNT_RESOLVE_PROXY`, `CURLE_COULDNT_RESOLVE_HOST`, `CURLE_COULDNT_CONNECT`, `CURLE_OPERATION_TIMEOUTED`, `CURLE_SSL_CONNECT_ERROR`, `CURLE_GOT_NOTHING`, `CURLE_SEND_ERROR`, `CURLE_RECV_ERROR`, `CURLE_PARTIAL_FILE`.
 
