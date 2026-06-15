@@ -22,7 +22,7 @@ final readonly class PublicAccess {}
 
 ## Resolution semantics
 
-`Waffle\Commons\Security\Container\SecureContainer::analyze($controller, $method)` consults `#[PublicAccess]` only when the target carries no `#[Voter]`. The check order is:
+`Waffle\Commons\Security\Container\SecureContainer::analyze($request, $controller, $method)` consults `#[PublicAccess]` only when the target carries no `#[Voter]`. The check order is:
 
 1. Has the **method** any `#[Voter]`? → Run the voters; `#[PublicAccess]` is ignored.
 2. Has the **class** any `#[Voter]`? → Run the voters; `#[PublicAccess]` is ignored.

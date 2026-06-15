@@ -56,14 +56,16 @@ A Voter must implement `Waffle\Commons\Contracts\Security\VoterInterface`:
 ```php
 namespace App\Security\Voter;
 
+use Waffle\Commons\Contracts\Auth\SecurityContextInterface;
 use Waffle\Commons\Contracts\Security\VoterInterface;
 
 class IsAdminVoter implements VoterInterface
 {
-    public function decide(): bool
+    public function decide(SecurityContextInterface $ctx, mixed $subject = null): bool
     {
-        // Your logic here (e.g. check session, roles, etc.)
-        return true; 
+        // $ctx carries the authenticated identity (roles, subject id, client IP);
+        // $subject is the resource under decision (currently the PSR-7 request).
+        return in_array('ROLE_ADMIN', $ctx->getIdentity()?->roles ?? [], strict: true);
     }
 }
 ```

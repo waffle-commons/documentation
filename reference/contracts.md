@@ -236,7 +236,7 @@ interface SecurityInterface
 
 ### `Waffle\Commons\Contracts\Security\SecurityRuleInterface` / `VoterInterface`
 
-Building blocks for the ABAC ladder (`Level1Rule`…`Level10Rule`) and attribute-based voters.
+Building blocks for the ABAC ladder (`Level1Rule`…`Level10Rule`) and attribute-based voters. A voter implements `decide(SecurityContextInterface $ctx, mixed $subject = null): bool` — it receives the request-scoped security context (identity, roles, client IP) and the subject under decision (the resolved resource, or the PSR-7 request), so ownership/IDOR rules are expressible.
 
 ### Attributes
 

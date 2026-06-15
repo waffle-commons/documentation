@@ -61,6 +61,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**The Universal Data & Persistence Layer**](explanation/data-persistence.md): Why no ORM — SQR, per-backend compilers, stateless repositories, honest drivers (RFC-022).
 - [**The Request Lifecycle**](explanation/lifecycle.md): From index.php to Response.
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).
+- [**The Two Authorization Layers**](explanation/security-two-layer-authorization.md): Object-integrity Level ladder vs. context-aware voters — why there are two `analyze()` methods (Beta-5 / AUTHZ-01, ARCH-01).
 - [**The Universal Authentication Bridge**](explanation/authentication-universal-bridge.md): One contract surface for every identity provider — and the zero-leak SecurityContext (RFC-021).
 - [**CSRF: Signed Double-Submit**](explanation/security-csrf-double-submit.md): Stateless HMAC + per-browser binding (Beta-1 / SEC-01).
 

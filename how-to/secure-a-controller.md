@@ -37,9 +37,13 @@ Class-level `#[Rule]` applies to every method on the class; method-level `#[Rule
 
 ## 3. ABAC voters via `#[Voter]`
 
-For decisions that depend on per-request state (user roles, ownership, etc.), declare a `#[Voter]` whose `decide()` method runs at dispatch time:
+For decisions that depend on per-request state (identity, roles, ownership), declare a `#[Voter]`. Its `decide()` method runs at dispatch time and receives two arguments:
+
+- **`SecurityContextInterface $ctx`** — the request-scoped security context: the authenticated identity (`getIdentity()`, `null` when anonymous) and the client IP. Roles live on the identity as a `list<string>` (`$ctx->getIdentity()?->roles`).
+- **`mixed $subject`** — the resource under decision. Until a richer resource resolver lands, this is the PSR-7 `ServerRequestInterface`, so a voter can read route attributes, the body, or load the target entity itself.
 
 ```php
+use Waffle\Commons\Contracts\Auth\SecurityContextInterface;
 use Waffle\Commons\Contracts\Security\Attribute\Voter;
 use Waffle\Commons\Contracts\Security\VoterInterface;
 
@@ -51,10 +55,40 @@ final class AdminController
 
 final class IsAdminVoter implements VoterInterface
 {
-    public function decide(): bool
+    public function decide(SecurityContextInterface $ctx, mixed $subject = null): bool
     {
-        // Check user roles / session / signed claims here.
-        return false;
+        // Roles are a list<string> on the verified identity; anonymous ⇒ deny.
+        return in_array('ROLE_ADMIN', $ctx->getIdentity()?->roles ?? [], strict: true);
+    }
+}
+```
+
+Voters are resolved through the **PSR-11 container**, so they may declare constructor dependencies (repositories, clocks, policy services). Keep them **stateless** — the container memoizes each voter for the worker's lifetime.
+
+### Ownership / IDOR decisions
+
+Because `decide()` receives both the caller (`$ctx`) and the resource context (`$subject`), object-level ownership — the classic [IDOR](https://owasp.org/Top10/A01_2021-Broken_Access_Control/) defence — is expressible directly:
+
+```php
+use Psr\Http\Message\ServerRequestInterface;
+use Waffle\Commons\Contracts\Auth\SecurityContextInterface;
+use Waffle\Commons\Contracts\Security\VoterInterface;
+
+final class OwnerVoter implements VoterInterface
+{
+    public function __construct(private DocumentRepository $documents) {}
+
+    public function decide(SecurityContextInterface $ctx, mixed $subject = null): bool
+    {
+        $identity = $ctx->getIdentity();
+        if ($identity === null || !$subject instanceof ServerRequestInterface) {
+            return false; // anonymous, or no request context → deny
+        }
+
+        $document = $this->documents->find((string) $subject->getAttribute('id'));
+
+        // Deny unless the authenticated subject owns the requested document.
+        return $document !== null && $document->ownerId === $identity->subject;
     }
 }
 ```
@@ -115,12 +149,12 @@ Canonical Beta-1 middleware order (already wired by the skeleton's `AppKernelFac
 ErrorHandler → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → SecureHeaders → Dispatcher
 ```
 
-`SecurityMiddleware` then delegates to `SecureContainer::analyze($controller, $method)`:
+`SecurityMiddleware` then delegates to `SecureContainer::analyze($request, $controller, $method)`:
 
 1. Reads `_classname` + `_method` from the request attributes (set by `CoreRoutingMiddleware`).
 2. Collects `#[Voter]` attributes from the method **and** its declaring class.
 3. **Fail-closed:** if the voter list is empty AND no `#[PublicAccess]` is attached → `SecurityException(403)`.
-4. Otherwise runs every `VoterInterface::decide()` — any `false` → `SecurityException(403)`.
+4. Otherwise resolves each voter from the PSR-11 container and runs `VoterInterface::decide($ctx, $request)` — any `false` → `SecurityException(403)`.
 5. Any failure → `SecurityExceptionInterface` → RFC 7807 `403` via the error handler.
 
 `CsrfMiddleware` runs the CSRF check on actions tagged `#[RequiresCsrfToken]`, using the SID published by `AnonymousSessionMiddleware`.
