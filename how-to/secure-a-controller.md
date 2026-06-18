@@ -95,6 +95,13 @@ final class OwnerVoter implements VoterInterface
 
 `#[Voter]` is repeatable (`Attribute::IS_REPEATABLE`); the request is denied if **any** voter returns `false`.
 
+> **What `$subject` is (and isn't).** The container threads the current PSR-7
+> `ServerRequestInterface` in as `$subject`; Waffle does **not** yet auto-resolve a
+> domain entity for you. An ownership voter therefore reads the identifier off the
+> request (route attribute, query, or body) and loads the resource itself — exactly
+> as `OwnerVoter` does above. Treat the gate as deny-by-default **policy enforcement**:
+> never assume the framework has already fetched or authorized the target object.
+
 ## 4. Fail-closed default — explicit `#[PublicAccess]` for public endpoints
 
 Beta-1 enables **fail-closed ABAC**: an action that carries no `#[Voter]` at all (neither on the method nor its declaring class) is denied with HTTP `403`. The previous "no rules ⇒ allow" semantics are gone — forgetting to attach a voter is no longer silently permissive.
