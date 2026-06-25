@@ -1,6 +1,6 @@
 # Security Reference (`waffle-commons/security`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
 
 Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a fully stateless CSRF protection layer (signed double-submit with per-browser binding) and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
 

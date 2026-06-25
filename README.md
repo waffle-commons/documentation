@@ -8,13 +8,13 @@
 
 > [!WARNING]
 > **BETA SOFTWARE**
-> This version (`0.1.0-beta4`) is the **security-hardening & worker-mode-stability** release — the RC-readiness groundwork on top of Beta-3's identity-federation & stateless-persistence wave. Beta-4 closes the core security gaps (session-fixation rotation + cryptographic CSRF binding, **default-on** SSRF resolve→validate→pin with an internal allowlist, timing-safe comparison enforcement, **fail-closed CORS**, and path-traversal guardrails), hardens the architecture for resident-worker mode (typed kernel lifecycle events, stream-resource ownership, an interface-based response converter, a standalone uploaded-files normalizer), and adds worker-mode **diagnostics** (a boot-time state-reset compliance scanner and a dev-only orphaned-connection tracer for PDO/Redis/streams) plus developer-experience tooling (`wfl check:all` / `monorepo:sync`, native `mb_trim`, a mockable `ValidatorInterface`); the `wfl igor` worker-safety audit stays a 0-KO gate. Beta-3's `auth` (Universal Authentication Bridge, RFC-021) and `data` (Universal Data & Persistence Layer, RFC-022) components — and the Beta-1/Beta-2 foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, typed `405`/`404` contracts) — all remain in place. Do not use in critical production environments without an independent security audit.
+> This version (`0.1.0-beta5`) is the **event-driven, reactive & AOT-optimized runtime** release — the transition from a high-performance HTTP runner toward an enterprise-grade application runtime. Beta-5 ships Ahead-of-Time compilation (a compiled DI container + route trie behind `WAFFLE_AOT=1`, with a transparent reflection fallback), Fiber-based finish-request task deferral (the new `waffle-commons/async`) plus concurrent HTTP-client promise fan-out, reactive `#[Broadcast]` write-hooks flushed over Server-Sent Events after the response cycle, memory-resident PDO/Redis connection pooling with fail-safe transaction-isolation middleware, contract-first telemetry (the SDK-free Prometheus `/waffle-metrics` endpoint in `waffle-commons/telemetry` plus an opt-in OpenTelemetry bridge in `waffle-commons/telemetry-otel`), and native WebAuthn / passkey verification in `waffle-commons/auth`. It also closes the Beta-5 pre-release security audit (AXE 0): context-aware ABAC voters resolved through the container (ownership / IDOR rules now expressible), 4xx error-detail masking, stateless `php://temp` uploads, a `composer audit` release gate, and the removal of the last analyzer suppressions. Beta-4's security hardening (session-fixation rotation, cryptographic CSRF binding, **default-on** SSRF resolve→validate→pin, **fail-closed CORS**, path-traversal guardrails) and Beta-3's `auth` (Universal Authentication Bridge, RFC-021) + `data` (Universal Data & Persistence Layer, RFC-022) components — along with the Beta-1/Beta-2 foundations (fail-closed ABAC, stateless HMAC CSRF bound to `WAFFLE_SID`, typed `405`/`404` contracts) — all remain in place; the `wfl igor` worker-safety audit stays a 0-KO gate. Do not use in critical production environments without an independent security audit.
 
-## 🎯 The Beta-4 contract
+## 🎯 The Beta-5 contract
 
-Waffle Beta-4 is built around two non-negotiable principles:
+Waffle Beta-5 is built around two non-negotiable principles:
 
-- **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes**. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
+- **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes** — now including a repo-wide `cyclomatic-complexity` ceiling. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
 - **🐘 PHP 8.5 Strict.** Property Hooks for DTO validation, Asymmetric Visibility (`public private(set)`) for safe state exposure, typed constants for ecosystem-wide identifiers, `final readonly` for value objects, and `#[\Override]` on every interface implementation. The `mixed` type is forbidden in component surfaces (PSR-mandated exceptions aside).
 
 `mago guard` enforces the **architectural perimeter** in every component: each `mago.toml` declares the exact list of permitted dependencies, and structural rules enforce `*Interface`, `*Exception`, and `Enum\` conventions across the whole ecosystem.
@@ -67,7 +67,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ***
 
-*Verified for Waffle Framework 0.1.0-beta4 running on PHP 8.5.5+.*
+*Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
 
 ***
 

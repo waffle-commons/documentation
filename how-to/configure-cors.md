@@ -78,7 +78,7 @@ This is why `CorsMiddleware` must sit **before routing**: it answers the pre-fli
 
 ## 6. Pipeline placement
 
-The skeleton's canonical Beta-4 order already places CORS correctly — early, right after host validation and before anything that touches application state:
+The skeleton's canonical middleware order already places CORS correctly — early, right after host validation and before anything that touches application state:
 
 ```
 ErrorHandler → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → SecureHeaders → Dispatcher

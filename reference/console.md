@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 

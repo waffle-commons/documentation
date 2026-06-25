@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
