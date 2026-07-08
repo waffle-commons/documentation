@@ -11,7 +11,7 @@ Waffle enforces authorization at two distinct layers, and both entry points happ
 | Layer | Method | Question it answers | Driven by |
 |-------|--------|---------------------|-----------|
 | **1 — Object integrity** | `SecurityInterface::analyze(object $object, array $expectations = [])` | "Is this *service/object* structurally allowed to be wired and used at the configured strictness?" | The **Level 1–10 rule ladder**, set in app YAML (`waffle.security.level`). |
-| **2 — Request authorization** | `SecureContainer::analyze(ServerRequestInterface $request, string $controller, string $method)` | "Is *this caller* allowed to perform *this route/method* on *this resource*?" | Context-aware **`#[Voter]`** attributes (fail-closed). |
+| **2 — Request authorization** | `SecureContainer::analyze(string $controller, string $method, ?ServerRequestInterface $request = null)` | "Is *this caller* allowed to perform *this route/method* on *this resource*?" | Context-aware **`#[Voter]`** attributes (fail-closed). |
 
 ## Layer 1 — object integrity (the Level ladder)
 
@@ -28,13 +28,13 @@ This layer is about *structural* trust — the object is well-formed, correctly 
 
 ## Layer 2 — request authorization (context-aware voters)
 
-`SecurityMiddleware` calls `SecureContainer::analyze($request, $controller, $method)` once routing has resolved the target. This layer collects `#[Voter]` attributes from the method and its declaring class, resolves each voter from the **PSR-11 container** (so voters may have their own dependencies), and calls:
+`SecurityMiddleware` calls `SecureContainer::analyze($controller, $method, $request)` once routing has resolved the target. This layer collects `#[Voter]` attributes from the method and its declaring class, resolves each voter from the **PSR-11 container** (so voters may have their own dependencies), and calls:
 
 ```php
 $voter->decide($securityContext, $request);
 ```
 
-The voter sees **who** is calling — the request-scoped `SecurityContextInterface` (identity, roles, client IP) — and **what** is under decision — the subject, currently the PSR-7 request. That is what makes ownership / IDOR rules expressible (see [Secure a Controller](../how-to/secure-a-controller.md)). With no voter *and* no `#[PublicAccess]`, the request is denied `403` — see [Fail-Closed ABAC](security-fail-closed-abac.md).
+The voter sees **who** is calling — the request-scoped `SecurityContextInterface` (the authenticated identity — with its `roles` — and the client IP) — and **what** is under decision — the subject, currently the PSR-7 request. That is what makes ownership / IDOR rules expressible (see [Secure a Controller](../how-to/secure-a-controller.md)). With no voter *and* no `#[PublicAccess]`, the request is denied `403` — see [Fail-Closed ABAC](security-fail-closed-abac.md).
 
 ## How they compose
 
