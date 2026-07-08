@@ -1,6 +1,6 @@
 # Runtime Reference (`waffle-commons/runtime`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the dev-only orphaned-connection tracer (DIAG-03)*
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the dev-only orphaned-connection tracer (DIAG-03)*
 
 The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
 

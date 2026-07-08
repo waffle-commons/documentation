@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 
@@ -124,7 +124,7 @@ use Waffle\Commons\Console\ConsoleApplication;
 use Waffle\Commons\Console\Command\CacheClearCommand;
 use Waffle\Commons\Console\Command\RouteListCommand;
 
-$app = new ConsoleApplication(name: 'Waffle', version: '0.1.0-beta1');
+$app = new ConsoleApplication(name: 'Waffle', version: '0.1.0-beta5');
 
 $app->add(new CacheClearCommand($cache));
 $app->add(new RouteListCommand($router));

@@ -1,6 +1,6 @@
 # Security Reference (`waffle-commons/security`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
 
 Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a fully stateless CSRF protection layer (signed double-submit with per-browser binding) and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
 
@@ -69,8 +69,8 @@ waffle:
 
 PSR-15 middleware that:
 
-1. Reads `_controller` and `_method` from the request attributes (set by `CoreRoutingMiddleware`).
-2. Calls `Security::analyze()` against the resolved controller class.
+1. Reads `_classname` and `_method` from the request attributes (set by `CoreRoutingMiddleware`).
+2. Calls `SecureContainer::analyze($controller, $method, $request)` — the fail-closed, context-aware `#[Voter]` (Layer-2) authorization path. Each voter is resolved from the PSR-11 container and asked `decide(SecurityContextInterface $ctx, mixed $subject = null): bool`, so it sees the authenticated identity and the request; with no voter **and** no `#[PublicAccess]`, the request is denied. (Object-integrity — the `Level1Rule`…`Level10Rule` ladder via `Security::analyze()` — is the separate Layer-1 check that runs at container resolution; see [The Two Authorization Layers](../explanation/security-two-layer-authorization.md).)
 3. Lets the request pass on success; raises `SecurityExceptionInterface` on failure (rendered as `403` by the error handler).
 4. Logs access denials via the injected PSR-3 logger.
 

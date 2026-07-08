@@ -1,6 +1,6 @@
 # The Universal Data & Persistence Layer (RFC-022)
 
-> **Status:** shipped in `waffle-commons/data` (+ contracts) since the beta3 cycle; carried forward through `0.1.0-beta4`.
+> **Status:** shipped in `waffle-commons/data` (+ contracts) since the beta3 cycle; carried forward through `0.1.0-beta5`.
 > **Companion pages:** [data reference](../reference/data.md) · [How to: Database Migrations](../how-to/database-migrations.md).
 
 This page explains *why* the persistence layer looks the way it does. For exact signatures, use the reference.

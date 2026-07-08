@@ -1,6 +1,6 @@
 # Contracts Reference (`waffle-commons/contracts`)
 
-> **Release:** `0.1.0-beta4`
+> **Release:** `0.1.0-beta5`
 
 `waffle-commons/contracts` is the root package of the Waffle ecosystem. Every other component depends only on the contracts package plus its own declared PSR dependencies. The package contains interfaces, marker attributes, enums, exception interfaces, and ecosystem-wide typed constants — **no business logic**.
 
@@ -236,7 +236,7 @@ interface SecurityInterface
 
 ### `Waffle\Commons\Contracts\Security\SecurityRuleInterface` / `VoterInterface`
 
-Building blocks for the ABAC ladder (`Level1Rule`…`Level10Rule`) and attribute-based voters.
+Building blocks for the ABAC ladder (`Level1Rule`…`Level10Rule`) and attribute-based voters. A voter implements `decide(SecurityContextInterface $ctx, mixed $subject = null): bool` — it receives the request-scoped security context (the authenticated identity — with its `roles` — and the client IP) and the subject under decision (the resolved resource, or the PSR-7 request), so ownership/IDOR rules are expressible.
 
 ### Attributes
 

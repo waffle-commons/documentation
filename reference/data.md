@@ -1,6 +1,6 @@
 # Data Reference (`waffle-commons/data`)
 
-> **Release:** `0.1.0-beta4` &nbsp;|&nbsp; *Adds the optional dev-only connection-tracer hook (DIAG-03)*
+> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the optional dev-only connection-tracer hook (DIAG-03)*
 > **Requires:** PHP 8.5+, `ext-pdo`, `psr/http-client`, `psr/http-factory`, `psr/http-message`. Depends only on `waffle-commons/contracts`.
 > **Suggests:** `ext-redis` (live key-value driver), `ext-mongodb` (live document driver).
 
@@ -103,7 +103,7 @@ All repositories are **stateless** (safe to share across worker requests), hydra
 | Repository | Constructor | Backend / notes |
 | :--- | :--- | :--- |
 | `Repository\SQLRepository` | `(ConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler(), ?DataMapperInterface $mapper = null, ?SQLWriteCompiler $writeCompiler = null)` | Any PDO engine. `stream()` is a **true driver cursor**; writes run in a transaction (rollback on failure). `$writeCompiler` SHOULD share the read compiler's dialect. |
-| `Repository\FirestoreRepository` | `forPublic(FirestoreClientInterface $client, string $target, SecurityContextInterface $security, DataMapperInterface $mapper, string $appId)` / `forPrivate(...)` | Document store with the three guardrails (§4.2) — see the [Firestore compiler](#firestore-compiler--wafflecommonsdatacompilerfirestorecompiler) + [driver](#document-firestore--driverfirestorefirestoreclientinterface). |
+| `Repository\FirestoreRepository` | `forPublic(FirestoreClientInterface $client, string $target, SecurityContextInterface $security, DataMapperInterface $mapper, string $appId)` / `forPrivate(...)` | Document store with the three guardrails (§4.2) — see the [Firestore compiler](#firestore-compiler--wafflecommonsdatacompilerfirestorecompiler) + [driver](#document--driverfirestorefirestoreclientinterface). |
 | `Repository\JsonFileRepository` | `(string $path, string $target, JsonFileStore $store = new JsonFileStore(), ?DataMapperInterface $mapper = null)` | Atomic flat-file JSON (§4.3); SQR + writes evaluated in memory then written atomically. |
 | `Repository\KeyValueRepository` | `(KeyValueClientInterface $client, string $target, KeyValueCompiler $compiler = new KeyValueCompiler(), ?DataMapperInterface $mapper = null)` | Redis/DynamoDB; one JSON document per key. Writes require an explicit identity (no auto-id). |
 | `Repository\MongoRepository` | `(MongoSessionInterface $session, string $target, MongoCompiler $compiler = new MongoCompiler(), ?DataMapperInterface $mapper = null)` | Server-side push-down; writes are insert / replace-upsert / deleteOne. |

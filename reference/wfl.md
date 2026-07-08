@@ -79,7 +79,7 @@ The active PHP profile is a symlink that `wfl` flips, then it restarts the `waff
 | :--- | :--- |
 | `wfl link <consumer> <provider>` | Add a Composer `path` repository (`../<provider>`, non-symlink) to `<consumer>/composer.json` and `composer update waffle-commons/<provider>` so the consumer builds against your **local** provider checkout. |
 | `wfl unlink <consumer> <provider>` | Remove that `path` repository from `<consumer>/composer.json` and `composer update` back to the registry version. |
-| `wfl csrf-init [token-id]` | Generate a matching `WAFFLE_SID` cookie value and a signed `X-CSRF-Token` (HMAC over `nonce ‖ expiresAt ‖ id ‖ sid`) for manual API testing. Token id defaults to `_default`. Reads `WAFFLE_CSRF_SECRET` from the environment or `.env`; generates an ephemeral secret if none is found. |
+| `wfl csrf-init [token-id]` | Generate a matching `WAFFLE_SID` cookie value and a signed `X-CSRF-Token` (HMAC over `nonce ‖ expiresAt ‖ id ‖ anon:sid`, matching the server's `anon:`/`auth:` binding) for manual API testing. Token id defaults to `_default`. Reads `WAFFLE_CSRF_SECRET` from the environment or `.env`; generates an ephemeral secret if none is found. |
 | `wfl secret-gen` | Print a fresh 32-byte (256-bit) cryptographically secure application secret, suitable for `APP_SECRET` / `WAFFLE_CSRF_SECRET`. |
 | `wfl monorepo:sync [--fix]` | **DX-01.** Report (or with `--fix`, align) the `waffle-commons/*` sibling version constraints each component declares, against the monorepo `self.version` convention (the template apps are out of scope). Read-only by default. |
 

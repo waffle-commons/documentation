@@ -1,6 +1,6 @@
 # Routing Reference (`waffle-commons/routing`)
 
-> **Release:** `0.1.0-beta4`
+> **Release:** `0.1.0-beta5`
 
 Attribute-driven router. Routes live next to the controller code via the `#[Route]` attribute; the `RouteDiscoverer` scans the configured controller directory at boot time and the compiled table is cached.
 
