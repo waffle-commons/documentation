@@ -33,13 +33,66 @@ The database analogue of the persistent cURL handles above is [Memory-Resident C
 
 ## Measured numbers
 
-*Placeholder — the Beta-6 benchmark campaign lands its results here.*
+These are results, not claims. The full method, raw data and every deviation live in
+`bench/BENCH-GATE-RESULT.md`; the harness is `bench/` and each run is one command.
 
-The Beta-6 stabilization cycle runs a **K6 tri-engine benchmark**, and this section will carry the published figures rather than claims. Method, for reproducibility:
+**Rig.** Three engines, one at a time, CPU pinned identically (2 cores): **A** Waffle on
+the FrankenPHP worker, **B** Symfony on php-fpm, **C** the same Symfony app on the
+FrankenPHP worker. B isolates the classic stack; C holds the runtime constant so an
+A-vs-C difference is attributable to the framework rather than the runtime.
 
-- **Latency:** constant-arrival-rate scenarios (open-model load, so latency degradation cannot hide behind a slowing load generator), reported as percentile distributions (p50/p95/p99) per engine.
-- **Memory stability:** a long soak run asserting the `ΔM = 0` invariant — flat worker RSS across the full soak, the runtime counterpart of the static `wfl igor` audit.
+### Latency under constant arrival rate
 
-Until those runs are published, this page intentionally quotes **no absolute numbers**: every performance claim above is architectural (what work is avoided and why), not a benchmark result.
+Per rate step (p50, ms) — aggregates across a ladder are meaningless once any step
+saturates, so the table is per-step:
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+| Workload | rps | A — Waffle worker | B — Symfony FPM | C — Symfony worker |
+|---|---:|---:|---:|---:|
+| static JSON | 400 | 1.2 | 2.2 | 1.1 |
+| static JSON | 800 | **1.0** | 587.8 | 1.3 |
+| DB read | 50 | 4.0 | 19.2 | 2.6 |
+| DB read | 200 | 2.9 | 4877 | 2.0 |
+| DB write | 200 | 2.9 | 3348 | 2.4 |
+
+Against the classic stack the difference is structural: Symfony on php-fpm collapses on
+database workloads between 100 and 200 rps — at 200 rps it completed 5 094 of 12 000
+scheduled requests — while the worker engines hold single-digit milliseconds.
+
+### Throughput and memory against php-fpm
+
+Measured at matched concurrency with php-fpm on a *dynamic* pool (128 children), the
+configuration most favourable to it:
+
+| | Waffle worker | Symfony php-fpm |
+|---|---:|---:|
+| Throughput | **781.6 req/s** | 100.5 req/s |
+| p50 | **35.0 ms** | 303.7 ms |
+| RSS growth per concurrent request | **+0.105 MiB** | +1.099 MiB |
+
+**Memory grows 10.5× slower per concurrent request.** That slope — not a single
+constant — is the honest form of the "less RAM than PHP-FPM" claim, and it is worth
+being precise about why:
+
+- At **8 concurrent requests php-fpm uses *less* total RAM** (0.87×). Waffle pays a
+  fixed floor (256 MB opcache, 128 MB JIT buffer) shared by a resident worker set.
+- The **crossover is near 12–16 concurrent requests**.
+- At **128 concurrent the measured advantage is 2.37×**, and it keeps widening, because
+  one runtime allocates per process and the other does not.
+
+A blanket "5–10× less RAM" is therefore not something this project publishes: it is
+false at low concurrency and only reached far beyond the measured range.
+
+### Connection-pool behaviour under oversubscription
+
+Driving 64 concurrent requests against an 8-connection pool — 8× oversubscription:
+**868 req/s**, p99.9 **98 ms**, zero rejected requests, zero pool-exhaustion errors, no
+deadlock, and the pool returns to idle with no leaked connections. Degradation is
+queueing, bounded and graceful.
+
+### Memory stability (ΔM)
+
+A constant-load soak on both worker engines with the request-recycle limit lifted, so a
+leak cannot hide behind a worker restart: RSS drift stays **within measurement
+resolution** across the run, the runtime counterpart of the static `wfl igor` audit.
+
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6, FrankenPHP 1.12.2.*

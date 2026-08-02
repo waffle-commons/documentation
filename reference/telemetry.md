@@ -1,6 +1,6 @@
 # Telemetry Reference (`waffle-commons/telemetry`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *SDK-free Prometheus metrics + tracing wiring (OBS-02, RFC-005, AXE5)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *SDK-free Prometheus metrics + tracing wiring (OBS-02, RFC-005, AXE5)*
 > **Requires:** PHP 8.5+. Depends only on `waffle-commons/contracts`.
 > **Suggests:** `ext-apcu` (with `apc.enable_cli` under the worker SAPI) for cumulative counters; without it the wiring falls back to the contract `NullMetricsRegistry`.
 

@@ -1,6 +1,6 @@
 # The Two Authorization Layers
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Formalized in Beta-5 (ARCH-01)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Formalized in Beta-5 (ARCH-01)*
 > **Diátaxis quadrant:** Explanation
 > **Tracks:** AUTHZ-01, ARCH-01
 

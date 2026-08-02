@@ -1,6 +1,6 @@
 # WebAuthn / Passkeys Reference (`waffle-commons/auth`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the WebAuthn / passkey surface (AUTH-01 / AXE6) under RFC-021.*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Adds the WebAuthn / passkey surface (AUTH-01 / AXE6) under RFC-021.*
 > **Requires:** PHP 8.5+, `ext-openssl`, `web-auth/webauthn-lib ^5.3`, `symfony/serializer ^8.1`, `symfony/uid ^8.1`. Depends only on `waffle-commons/contracts`.
 
 The WebAuthn surface is the passkey scheme of the Universal Authentication Bridge. The cryptographic core sits behind a single contract (`Waffle\Commons\Contracts\Auth\WebAuthn\WebAuthnVerifierInterface`) and one concrete adapter (`Waffle\Commons\Auth\WebAuthn\WebAuthnLibAdapter`) — the **only** class that imports `web-auth/webauthn-lib`. Everything else (the ceremony service, the inbound authenticator, the option/credential DTOs) speaks the contract. The component is stateless across FrankenPHP worker requests; the only stateful pieces — the challenge store and the credential repository — are interfaces the integrating app provides.

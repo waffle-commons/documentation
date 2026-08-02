@@ -1,6 +1,6 @@
 # AOT Compilation Reference (Beta-5)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Ahead-of-Time container + route compilation (AOT-01 / AOT-02, RFC-019)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Ahead-of-Time container + route compilation (AOT-01 / AOT-02, RFC-019)*
 > **Spans:** `waffle-commons/contracts`, `waffle-commons/console`, `waffle-commons/routing`, `waffle-commons/waffle`.
 
 Build-time Ahead-of-Time compilation for FrankenPHP's resident worker. Two independent artifacts — a reflection-free **compiled container** and a serialised **route trie** — are produced by explicit CLI commands and consumed only when `WAFFLE_AOT=1`, with a transparent reflection fallback on any miss. The compiled container is proven structurally identical to the runtime container by a snapshot test (deep-equal, FQCN-normalised — not instance identity).
