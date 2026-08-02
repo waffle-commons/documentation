@@ -76,7 +76,16 @@ The exception message does **not** include the allowlist contents — to avoid i
 
 ### `Waffle\Commons\Pipeline\Middleware\SecureHeadersMiddleware`
 
-Adds the baseline security response headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, etc.) to every outgoing response.
+```php
+final readonly class SecureHeadersMiddleware implements MiddlewareInterface
+{
+    public function __construct(
+        private string $contentSecurityPolicy = "default-src 'self'",
+    );
+}
+```
+
+Adds the baseline security response headers to every outgoing response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy` (the policy string is the single constructor parameter). Note that bare-string controller responses carry their own stricter CSP, set by `ControllerResponseConverter` (`default-src 'self'; form-action 'self'; base-uri 'self'`) — see [core.md](core.md).
 
 ## Conventional ordering (Beta-1)
 
@@ -88,6 +97,8 @@ $stack = (new MiddlewareStack())
     ->add(new CoreRoutingMiddleware($router, $responseFactory))         // 4. resolves _classname / _method; auto-answers OPTIONS
     ->add(new CsrfMiddleware($csrfTokenManager))                        // 5. validates #[RequiresCsrfToken] using _anon_sid
     ->add(new SecurityMiddleware($secureContainer, $logger))            // 6. fail-closed ABAC analysis
+                                                                        //    optional 3rd arg (Beta-6): a SubjectResolverInterface that hydrates
+                                                                        //    the domain subject passed to voters (IDOR/ownership rules)
     ->add(new SecureHeadersMiddleware())                                // 7. innermost — adds defensive response headers
 ;
 

@@ -10,19 +10,22 @@ For the architectural reasoning (why compile-layer + ports, why no Active Record
 
 ## Connection pool — `Waffle\Commons\Data\Connection\PDOConnectionPool`
 
-`final` implementation of `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` and `Waffle\Commons\Contracts\Service\ResettableInterface`.
+`final` implementation of `Waffle\Commons\Contracts\Data\Connection\RelationalConnectionPoolInterface` (which extends `ConnectionPoolInterface`) and `Waffle\Commons\Contracts\Service\ResettableInterface`. Since Beta-5 (DBAL-01) the pool dispenses typed **lease handles** (`PdoConnectionInterface`), not raw `PDO` — the raw handle is reached via `$lease->pdo()`. Full lease/affinity/Redis-pool listing in the [Connection Pool reference](connection-pool.md).
 
 ```php
 public function __construct(
-    Closure $factory,                 // () : PDO — produces a freshly connected handle
-    int $maxConnections = 8,          // hard ceiling on simultaneously borrowed connections
-    string $pingQuery = 'SELECT 1',   // liveness probe run before dispensing
+    Closure $factory,                              // () : PDO — produces a freshly connected handle
+    int $maxConnections = 8,                        // hard ceiling on simultaneously borrowed connections
+    string $pingQuery = 'SELECT 1',                 // liveness probe run before dispensing
+    ?ConnectionTrackerInterface $tracker = null,    // DIAG-03 dev-only tracer; null ⇒ zero overhead
 );
 
-public function acquire(): PDO;                              // ping-before-dispense; reconnects transparently
-public function release(PDO $connection): void;             // return to the idle set (idempotent)
-public function prepare(PDO $connection, string $sql): PDOStatement; // cached prepared statement
-public function reset(): void;                              // worker reset: rollback stragglers, clear cache
+public function acquire(): PdoConnectionInterface;           // ping-before-dispense; reconnects transparently
+public function beginRequestScope(): PdoConnectionInterface; // pin one lease for the request (DBAL-01)
+public function endRequestScope(): void;                     // unpin + return to idle
+public function release(ConnectionInterface $connection): void; // return to the idle set (idempotent, fail-soft)
+public function prepare(PdoConnectionInterface $connection, string $sql): PDOStatement; // cached prepared statement
+public function reset(): void;                               // worker reset: rollback stragglers, clear cache
 public function idleCount(): int;
 public function activeCount(): int;
 ```
@@ -102,13 +105,15 @@ All repositories are **stateless** (safe to share across worker requests), hydra
 
 | Repository | Constructor | Backend / notes |
 | :--- | :--- | :--- |
-| `Repository\SQLRepository` | `(ConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler(), ?DataMapperInterface $mapper = null, ?SQLWriteCompiler $writeCompiler = null)` | Any PDO engine. `stream()` is a **true driver cursor**; writes run in a transaction (rollback on failure). `$writeCompiler` SHOULD share the read compiler's dialect. |
+| `Repository\SQLRepository` | `(RelationalConnectionPoolInterface $pool, string $target, SQLCompiler $compiler = new SQLCompiler(), ?DataMapperInterface $mapper = null, ?SQLWriteCompiler $writeCompiler = null)` | Any PDO engine. `stream()` is a **true driver cursor**; writes run in a transaction (rollback on failure). `$writeCompiler` SHOULD share the read compiler's dialect. |
 | `Repository\FirestoreRepository` | `forPublic(FirestoreClientInterface $client, string $target, SecurityContextInterface $security, DataMapperInterface $mapper, string $appId)` / `forPrivate(...)` | Document store with the three guardrails (§4.2) — see the [Firestore compiler](#firestore-compiler--wafflecommonsdatacompilerfirestorecompiler) + [driver](#document--driverfirestorefirestoreclientinterface). |
 | `Repository\JsonFileRepository` | `(string $path, string $target, JsonFileStore $store = new JsonFileStore(), ?DataMapperInterface $mapper = null)` | Atomic flat-file JSON (§4.3); SQR + writes evaluated in memory then written atomically. |
 | `Repository\KeyValueRepository` | `(KeyValueClientInterface $client, string $target, KeyValueCompiler $compiler = new KeyValueCompiler(), ?DataMapperInterface $mapper = null)` | Redis/DynamoDB; one JSON document per key. Writes require an explicit identity (no auto-id). |
 | `Repository\MongoRepository` | `(MongoSessionInterface $session, string $target, MongoCompiler $compiler = new MongoCompiler(), ?DataMapperInterface $mapper = null)` | Server-side push-down; writes are insert / replace-upsert / deleteOne. |
 | `Repository\CassandraRepository` | `(CqlSessionInterface $session, string $target, CassandraCompiler $compiler = new CassandraCompiler(), ?DataMapperInterface $mapper = null)` | Parameterised CQL; `save()` is a CQL `INSERT` (upsert). |
 | `Repository\GraphQLRepository` | `(GraphQLExecutor $executor, string $target, GraphQLCompiler $compiler = new GraphQLCompiler(), ?DataMapperInterface $mapper = null)` | GraphQL service as a virtual engine; writes are Hasura-style mutations. |
+
+Every repository also exposes `withTracer(TracerInterface $tracer): self` — a wither returning a traced clone whose queries are recorded as native DB spans (`Waffle\Commons\Data\Telemetry\QueryTracer`); the default is the no-op tracer, so tracing costs nothing unless wired.
 
 `$target` is the `class-string<T>` of the `readonly` DTO each row hydrates into. `findOne()` rebuilds the SQR with a server-side bound (`LIMIT 1` / `limit: 1`) whenever the concrete `Query` is passed and the backend supports it; backends without a cursor implement `stream()` by yielding from the bounded result page — only `SQLRepository` streams from a live cursor. `findById()` reuses the read path with an `identityField = id` equality predicate.
 
@@ -202,7 +207,7 @@ A key-value store addresses opaque values by key alone, so the compiler accepts 
 public function compile(QueryInterface $query): CompiledCassandraQuery; // throws \InvalidArgumentException
 ```
 
-CQL is SQL-like but deliberately narrower: equality, the four range operators, and `IN` compile to parameterised CQL with `?` markers; **`<>`, `NOT IN`, `LIKE`, and `OFFSET` pagination are rejected** (CQL has none of them — Cassandra pages with token state). `CompiledCassandraQuery` (`final readonly`):
+CQL is SQL-like but deliberately narrower: equality, the four range operators, and `IN` compile to parameterised CQL with `?` markers; **`<>`, `NOT IN`, `LIKE`, and `OFFSET` pagination are rejected** (CQL has none of them — Cassandra pages with token state). The compiler's `quoteIdentifier(string): string` is public so write paths share the same identifier quoting. `CompiledCassandraQuery` (`final readonly`):
 
 ```php
 public string $cql;
@@ -346,7 +351,7 @@ Either layer failing yields a `Waffle\Commons\Contracts\Exception\Validation\Val
 `final` implementation of `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
 
 ```php
-public function __construct(ConnectionPoolInterface $pool, ConfigInterface $config);
+public function __construct(RelationalConnectionPoolInterface $pool, ConfigInterface $config);
 
 /**
  * @param (Closure(string): void)|null $onApplied  per-version progress callback
@@ -392,7 +397,7 @@ Both implement their respective contracts interface so callers catch persistence
 
 ## Worker-safety contract
 
-`PDOConnectionPool` is the only stateful object, and its state is explicitly recyclable via `reset()`. Compilers, repositories, drivers, the evaluator, the normaliser, the hydrator, the warmer, and the query AST are stateless / immutable (the component passes the `igor-php` worker-mode audit with zero findings). The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
+The connection pools (`PDOConnectionPool`, `RedisConnectionPool`) are the only stateful objects, and their state is explicitly recyclable via `reset()`. Compilers, repositories, drivers, the evaluator, the normaliser, the hydrator, the warmer, and the query AST are stateless / immutable (the component passes the `igor-php` worker-mode audit with zero findings). The kernel calls `reset()` between worker iterations (and the `db:migrate` command resets the pool on the way out), so no per-request state leaks across the FrankenPHP worker boundary.
 
 ## Quick example
 

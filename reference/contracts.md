@@ -81,6 +81,10 @@ interface ContainerInterface extends PsrContainerInterface, ResettableInterface
 
 `ResettableInterface` adds `reset(): void` — the kernel calls it between requests so the instance cache is cleared while definitions stay registered.
 
+### `Waffle\Commons\Contracts\Container\CompiledContainerInterface`
+
+*Added in Beta-5 (RFC-019 / AOT).* Marker contract — `extends ContainerInterface` with no extra methods — identifying an ahead-of-time compiled container so the boot path can distinguish it from the reflection-based one. See [aot.md](aot.md).
+
 ## Routing
 
 ### `Waffle\Commons\Contracts\Routing\RouterInterface`
@@ -143,7 +147,7 @@ Added in Beta-3; consumed by the `waffle-commons/data` component.
 
 | Interface | Purpose |
 | :--- | :--- |
-| `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable PDO connections: `acquire(): PDO` (ping-before-dispense, transparent reconnect) and `release(PDO): void`. Implementations also implement `ResettableInterface`. |
+| `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface` | Worker-safe pool of reusable connections, generalised in Beta-5: `acquire(): ConnectionInterface` (ping-before-dispense, transparent reconnect) and `release(ConnectionInterface): void`. Backend-typed specialisations narrow the surface — `RelationalConnectionPoolInterface` (`acquire(): PdoConnectionInterface`, plus `beginRequestScope()`/`endRequestScope()`) and `RedisConnectionPoolInterface`. Implementations also implement `ResettableInterface`. |
 | `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface` | Forward-only SQL migration runner: `run(?Closure $onApplied = null): list<string>` — applies pending migrations in version order, idempotently. |
 | `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface` | Base contract for data-layer failures (`extends Throwable`); `getSqlState(): ?string` exposes the ANSI SQLSTATE when the backend provides one. |
 | `Waffle\Commons\Contracts\Data\Exception\SecurityPathViolationExceptionInterface` | `extends DatabaseExceptionInterface` — a Firestore operation would target a non-isolated path (guardrail Rule 1). |
@@ -175,7 +179,7 @@ Extends `Psr\EventDispatcher\EventDispatcherInterface`.
 
 ### `Waffle\Commons\Contracts\EventDispatcher\ListenerProviderInterface`
 
-Extends `Psr\EventDispatcher\ListenerProviderInterface`.
+Standalone (does **not** extend the PSR interface): `getListenersForEvent(object $event): iterable<callable>`.
 
 ## Logging (PSR-3)
 
@@ -238,10 +242,20 @@ interface SecurityInterface
 
 Building blocks for the ABAC ladder (`Level1Rule`…`Level10Rule`) and attribute-based voters. A voter implements `decide(SecurityContextInterface $ctx, mixed $subject = null): bool` — it receives the request-scoped security context (the authenticated identity — with its `roles` — and the client IP) and the subject under decision (the resolved resource, or the PSR-7 request), so ownership/IDOR rules are expressible.
 
+### `Waffle\Commons\Contracts\Security\SubjectResolverInterface`
+
+*Added in Beta-6 (SEC-05).* Resolves the domain subject under decision for the current request:
+
+```php
+public function resolve(ServerRequestInterface $request): mixed;
+```
+
+The security middleware invokes it post-routing / pre-dispatch (route parameters are already request attributes) and threads the returned value into every voter as `$subject`, taking precedence over the bare request. Fail-closed: a resolution failure MUST throw (the caller denies the request); `null` is reserved for routes that genuinely carry no resource. Implementations must be stateless.
+
 ### Attributes
 
-- `Waffle\Commons\Contracts\Security\Attribute\Rule` — declares the required security level on a controller method or class.
-- `Waffle\Commons\Contracts\Security\Attribute\Voter` — registers a class as an ABAC voter.
+- `Waffle\Commons\Contracts\Security\Attribute\PublicAccess` — method-only opt-out from fail-closed ABAC (see [attributes-public-access.md](attributes-public-access.md)).
+- `Waffle\Commons\Contracts\Security\Attribute\Voter` — declares a required ABAC voter (by FQCN) on a controller class or method.
 - `Waffle\Commons\Contracts\Security\Csrf\Attribute\RequiresCsrfToken` — marks a route as requiring CSRF validation.
 
 ## Handlers

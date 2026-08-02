@@ -34,9 +34,11 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ### New to Waffle?
 - [**Installation & First App**](tutorials/quick-start.md): Get up and running in 5 minutes with Docker.
+- [**Your First Secured CRUD Endpoint**](tutorials/first-secured-crud-endpoint.md): Fail-closed ABAC, `#[Voter]`, CSRF, property-hook validation, and a pooled transactional write — step by step.
+- [**First Steps with Async Work and Telemetry**](tutorials/first-async-and-telemetry.md): Defer post-response work, scrape `/waffle-metrics`, and read the memory/pool gauges.
 
 ### Solving a Problem?
-- [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Rule]`, `#[Voter]`, CSRF.
+- [**Secure Your Controller**](how-to/secure-a-controller.md): Security level, `#[Voter]`, `#[PublicAccess]`, CSRF.
 - [**Authenticate Requests**](how-to/authentication.md): OAuth2/OIDC, JWT Bearer, gateway assertions, API keys — inbound + outbound (RFC-021).
 - [**Configure CORS**](how-to/configure-cors.md): Fail-closed cross-origin policy, exact-origin allow-list, the `*`-with-credentials ban (SEC-04).
 - [**Add Middleware**](how-to/middleware.md): Intercepting requests.
@@ -57,7 +59,8 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Index of Components**](reference/index.md)
 
 ### Under the Hood
-- [**Architecture**](explanation/architecture.md): The Component-First philosophy.
+- [**Architecture**](explanation/architecture.md): The Component-First philosophy, the contracts perimeter, and the statelessness mandate.
+- [**Performance Strategy**](explanation/performance.md): Worker mode, preloading + AOT, memory-bounded proxying, pooling — and where the Beta-6 benchmark numbers will land.
 - [**The Universal Data & Persistence Layer**](explanation/data-persistence.md): Why no ORM — SQR, per-backend compilers, stateless repositories, honest drivers (RFC-022).
 - [**The Request Lifecycle**](explanation/lifecycle.md): From index.php to Response.
 - [**Fail-Closed ABAC**](explanation/security-fail-closed-abac.md): Why missing voters now deny (Beta-1 / SEC-02).

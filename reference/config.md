@@ -117,7 +117,7 @@ Pass `Failsafe::ENABLED` to skip filesystem loading entirely and use the safe ba
 
 ## Sibling classes
 
-- `Waffle\Commons\Config\YamlParser` — `final` wrapper around `yaml_parse_file()`.
+- `Waffle\Commons\Config\YamlParser` — `final` wrapper around `yaml_parse_file()` (implements `Contracts\Parser\YamlParserInterface`). Missing/unreadable/empty files are lenient (`[]`), but a genuinely malformed YAML file raises `InvalidConfigurationException` (via a warning-to-exception error handler) and **propagates uncaught** — a bad config file fails the boot, it is never silently swallowed. Refuses to run when `yaml.decode_php = 1`.
 - `Waffle\Commons\Config\DotEnv` — **Beta 1**: pure `.env` / `.env.local` parser. `load(): array<string,string>` returns the parsed map; **no longer mutates** `putenv()`, `$_ENV`, or `$_SERVER`. Within DotEnv itself, the first file wins on key conflict (`.env` beats `.env.local`). Boolean-typed keys (`APP_DEBUG`, `DEBUG`) are validated + normalized to `'1'`/`'0'`; invalid values throw `InvalidArgumentException`.
 - `Waffle\Commons\Config\Trait\ParserTrait` — shared parse helpers.
 - `Waffle\Commons\Config\Exception\InvalidConfigurationException` — implements `InvalidConfigurationExceptionInterface`.

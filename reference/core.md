@@ -11,36 +11,33 @@ The framework kernel. Orchestrates the PSR-15 middleware stack, dispatches lifec
 ```php
 namespace Waffle\Abstract;
 
-abstract class AbstractKernel implements KernelInterface
+abstract class AbstractKernel implements KernelInterface, TerminableInterface
 {
     protected string $environment = Constant::ENV_PROD;
     protected bool $booted = false;
 
-    public ?ConfigInterface $config = null;
-    public ?ContainerInterface $container = null;
-    protected ?SecurityInterface $security = null;
+    protected(set) ?System $system = null;                          // asymmetric visibility
     protected ?EventDispatcherInterface $dispatcher = null;
 
-    protected(set) ?System $system = null;                          // asymmetric visibility
-    protected(set) ?MiddlewareStackInterface $middlewareStack = null;
-
-    public function __construct(protected LoggerInterface $logger = new NullLogger());
+    public function __construct(
+        public protected(set) ConfigInterface $config,
+        public protected(set) ContainerInterface $container,
+        protected SecurityInterface $security,
+        protected(set) MiddlewareStackInterface $middlewareStack,
+        protected LoggerInterface $logger = new NullLogger(),
+    );
 }
 ```
 
-## Setter API
+## Constructor injection (ARCH-03)
 
-The kernel uses **setter injection** for its dependencies. Verbatim from `AbstractKernel`:
+Every **required** collaborator — config, container, security, middleware stack — is a mandatory constructor parameter, so a half-built kernel is unrepresentable. The previous nullable fields + `set*()` setters + `validateState()` temporal-coupling machinery are gone. The PSR-3 logger defaults to `NullLogger`.
+
+The **one** optional collaborator keeps a boot-time setter (marked `#[WorkerSafe(scope: 'boot-time')]`); every lifecycle hook no-ops when it is absent:
 
 ```php
-public function setContainerImplementation(PsrContainerInterface $container): void;
-public function setConfiguration(ConfigInterface $config): void;
-public function setSecurity(SecurityInterface $security): void;
-public function setMiddlewareStack(MiddlewareStackInterface $stack): void;
 public function setEventDispatcher(EventDispatcherInterface $dispatcher): void;
 ```
-
-The PSR-3 logger is passed via the constructor and stored as `protected LoggerInterface $logger`; default is `NullLogger`.
 
 ## Lifecycle
 
@@ -50,18 +47,17 @@ Initializes the environment (`APP_ENV`, environment string) and flips the `$boot
 
 ### `configure(): void`
 
-Runs once after `boot()`. Validates that `ConfigInterface`, `SecurityInterface`, and a PSR-11 container were injected. Builds the `System` binding. Registers a default `ControllerDispatcher` under `RequestHandlerInterface` **only when that slot is empty** — the lookup is `has()`-gated and idempotent, so a pre-registered terminal handler is left untouched. Optionally calls `$container->lock()` if available.
+Runs once after `boot()` (guarded by `$booted`). Scans the `waffle.paths.services` / `waffle.paths.controllers` config directories via `ContainerFactory`. Builds the `System` binding. Registers a default `ControllerDispatcher` under `RequestHandlerInterface` **only when that slot is empty** — the lookup is `has()`-gated and idempotent, so a pre-registered terminal handler is left untouched. Calls `$container->lock()` if available, then hands the locked container to `CompiledContainerLoader` — under `WAFFLE_AOT=1` with a valid artifact it swaps in the reflection-free `CompiledContainer`; on any miss the runtime container is returned unchanged (RFC-019 mandatory fallback).
 
 ### `handle(ServerRequestInterface): ResponseInterface`
 
 The request hot-path:
 
 1. Calls `boot()->configure()` lazily if not yet booted.
-2. `validateState()` — raises if the middleware stack / container / system isn't set up.
-3. Dispatches `RequestReceivedEvent`. Listeners may swap the request via the returned event instance.
-4. **Resolves** the terminal handler from the container under `Psr\Http\Server\RequestHandlerInterface` (type-checked) and runs the middleware stack against it — there is no hard-coded `new ControllerDispatcher(...)` on the hot path, so an app can pre-register its own terminal handler (Beta-1 Phase 1 decoupling).
-5. Dispatches `ResponseGeneratedEvent`. Listeners may swap the response.
-6. Returns the response.
+2. Dispatches `RequestReceivedEvent`. Listeners may swap the request via the returned event instance.
+3. **Resolves** the terminal handler from the container under `Psr\Http\Server\RequestHandlerInterface` (type-checked) and runs the middleware stack against it — there is no hard-coded `new ControllerDispatcher(...)` on the hot path, so an app can pre-register its own terminal handler (Beta-1 Phase 1 decoupling).
+4. Dispatches `ResponseGeneratedEvent`. Listeners may swap the response.
+5. Returns the response.
 
 ### `terminate(ServerRequestInterface, ResponseInterface): void`
 
@@ -69,7 +65,7 @@ Called by `WaffleRuntime` after the response has been emitted. Dispatches `Termi
 
 ### `reset(): void`
 
-Called between FrankenPHP worker requests. Currently calls `$container->reset()`.
+Called between FrankenPHP worker requests. Calls `$container->reset()`, then drains the logger when it implements `ResettableInterface` (so buffered log entries never bleed across worker requests).
 
 ## Lifecycle events
 
@@ -94,11 +90,9 @@ All three live in `Waffle\Event\*`. As of Beta-1 (leftover-purge §2) they expos
 
 ## Exceptions
 
-All inherit from `Waffle\Exception\WaffleException`:
-
-- `RouteNotFoundException` — implements `RouteNotFoundExceptionInterface`. Rendered as RFC 7807 `404`.
-- `ValidationException` — implements `ValidationExceptionInterface`. Rendered as RFC 7807 `422`, with the optional `getField()` surfaced into the payload.
-- `RenderingException` — generic rendering failures.
-- `InvalidConfigurationException` — kernel raised this when required setters are missing.
+- `RouteNotFoundException` — extends `WaffleException`, implements `RouteNotFoundExceptionInterface`. Rendered as RFC 7807 `404`.
+- `ValidationException` — extends `WaffleException`, implements `ValidationExceptionInterface`. Rendered as RFC 7807 `422`, with the optional `getField()` surfaced into the payload.
+- `RenderingException` — extends `WaffleException`; generic rendering failures.
+- `InvalidConfigurationException` — extends `\Exception` directly, implements `InvalidConfigurationExceptionInterface`; raised when a configuration value is missing or has an invalid type.
 
 The `ErrorHandlerMiddleware` translates each via interface-matching, so application exceptions opt into the right HTTP status by implementing the corresponding contract interface.

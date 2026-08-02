@@ -35,6 +35,15 @@ Strict, immutable PSR-7/17 implementation tuned for FrankenPHP worker mode. No s
 directory-traversal segment (`../`, `..\`) or a null byte is rejected, so a crafted
 upload cannot escape its intended directory.
 
+**Containment (`$baseDir`, Beta-6 / SEC-03).** `UploadedFile`'s constructor takes an
+optional sixth parameter, `?string $baseDir = null` — an existing directory every
+`moveTo()` destination must resolve inside, enforced via
+[`Assert::within()`](utils.md). `safePath()` alone only rejects literal `..` segments;
+it does not stop a fully qualified target from pointing outside the intended
+directory. `null` (the default) preserves prior behaviour, but callers with a
+configured upload root should always supply it. `GlobalsFactory` propagates its own
+`$uploadBaseDir` into every `$_FILES`-derived instance (see below).
+
 **Never build that target from raw client metadata.** `getClientFilename()` and
 `getClientMediaType()` are attacker-controlled — treat them as display labels only.
 Derive the stored name yourself (e.g. a generated id) and, when you must keep a
@@ -57,13 +66,19 @@ class GlobalsFactory implements GlobalsFactoryInterface
     /**
      * @param (callable(): StreamInterface)|null $bodyStreamFactory
      */
-    public function __construct(?callable $bodyStreamFactory = null);
+    public function __construct(
+        ?callable $bodyStreamFactory = null,
+        ?UploadedFilesNormalizer $uploadedFilesNormalizer = null,
+        ?ServerRequestHeadersMapper $headersMapper = null,
+        ?ServerRequestUriMapper $uriMapper = null,
+        ?string $uploadBaseDir = null,   // SEC-03: containment root for $_FILES-derived UploadedFile
+    );
 
     public function createFromGlobals(): ServerRequestInterface;
 }
 ```
 
-`createFromGlobals()` reads `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, and `php://input` (the body factory is injectable for tests). The result is a fully populated `Waffle\Commons\Http\ServerRequest`.
+`createFromGlobals()` reads `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, and `php://input` (the body factory is injectable for tests). The result is a fully populated `Waffle\Commons\Http\ServerRequest`. The `$_FILES` tree is normalised by `UploadedFilesNormalizer`, header and URI reconstruction are delegated to `ServerRequestHeadersMapper` / `ServerRequestUriMapper` (all default to fresh instances). `$uploadBaseDir` seeds the default normaliser so every constructed `UploadedFile` enforces `moveTo()` containment; it is ignored when an explicit normalizer is supplied.
 
 > **Security note.** `GlobalsFactory` does **not** enforce trusted hosts. Host-header anti-poisoning is the job of `Waffle\Commons\Pipeline\Middleware\TrustedHostMiddleware`, which runs between `ErrorHandlerMiddleware` and `CoreRoutingMiddleware`.
 

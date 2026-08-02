@@ -3,7 +3,7 @@
 > **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Ahead-of-Time container + route compilation (AOT-01 / AOT-02, RFC-019)*
 > **Spans:** `waffle-commons/contracts`, `waffle-commons/console`, `waffle-commons/routing`, `waffle-commons/waffle`.
 
-Build-time Ahead-of-Time compilation for FrankenPHP's resident worker. Two independent artifacts — a reflection-free **compiled container** and a serialised **route trie** — are produced by explicit CLI commands and consumed only when `WAFFLE_AOT=1`, with a transparent reflection fallback on any miss. The compiled container is proven graph-identical to the runtime container by a snapshot test.
+Build-time Ahead-of-Time compilation for FrankenPHP's resident worker. Two independent artifacts — a reflection-free **compiled container** and a serialised **route trie** — are produced by explicit CLI commands and consumed only when `WAFFLE_AOT=1`, with a transparent reflection fallback on any miss. The compiled container is proven structurally identical to the runtime container by a snapshot test (deep-equal, FQCN-normalised — not instance identity).
 
 For the architectural reasoning (why a build step, why no fingerprinting), see [Explanation: Ahead-of-Time Compilation](../explanation/aot-compilation.md). To switch it on, see [How to: Enable AOT](../how-to/enable-aot.md).
 
@@ -47,18 +47,21 @@ The emitted class (default FQCN `Waffle\Generated\CompiledContainer`) composes t
 ```php
 final class CompiledContainer implements \Waffle\Commons\Contracts\Container\CompiledContainerInterface
 {
-    private array $instances = [];                  // per-request memo, cleared on reset()
+    private const array INLINED = [ /* id => true membership map */ ];
+    private array $instances = [];                  // worker-lifetime memo of the INLINED singletons ONLY
 
     public function __construct(private readonly \Waffle\Commons\Container\Container $runtime) {}
 
-    public function get(string $id): mixed;          // match($id) of inlined `new …`; default → $this->runtime->get($id)
+    public function get(string $id): mixed;          // non-INLINED ids delegate to $this->runtime BEFORE the memo check; inlined ids memo a match($id) of literal `new …`
     public function has(string $id): bool;           // → $this->runtime->has($id)
     public function set(string $id, object|callable|string $concrete): void; // → $this->runtime->set(...)
-    public function reset(): void;                   // resets memoised ResettableInterface services, then $this->runtime->reset()
+    public function reset(): void;                   // cascades reset() over the inlined memo, then $this->runtime->reset()
 }
 ```
 
-`reset()` cascades `reset()` to every memoised service implementing `Waffle\Commons\Contracts\Service\ResettableInterface`, clears `$instances`, then resets the composed runtime container — introducing no new cross-request state (`igor-php` clean).
+The memo holds **only the inlined services** — `get()` guards on the `self::INLINED` membership map and delegates every non-inlined id (closures, pre-built objects, passthroughs) to the runtime container *without* memoising it locally, so a resettable passthrough resets exactly once per request (the runtime memo stays its single owner). `reset()` cascades `reset()` to every memoised service implementing `Waffle\Commons\Contracts\Service\ResettableInterface`, then resets the composed runtime container; it **never evicts** the memo — identity persists for the worker's lifetime, exactly like the runtime container's own `reset()`. When no definition is inlinable the memo is omitted entirely. No new cross-request state is introduced (`igor-php` clean).
+
+Accepted constraint (Beta-6): a closure factory or runtime-autowired passthrough that transitively resolves an inlined id builds its own runtime-side instance — the compiled memo never registers into the composed runtime container, so such an id can exist as one instance per memo. Each copy still resets exactly once per request via its own owner's `reset()` cascade. Graph parity is structural (FQCN-normalised deep-equality), not instance identity.
 
 ## Container compile command — `Waffle\Commons\Console\Command\ContainerCompileCommand`
 
@@ -142,7 +145,7 @@ public function __construct(
 );
 ```
 
-Takes the priority-sorted route list from `RouterInterface::getRoutes()` and writes a PHP artifact that `return`s the rehydrated payload (`base64_decode` + `unserialize`). When the optional `$trieCompiler` closure is wired (the app may reference `RouteTrie::build($routes)->toArray()`), the serialised payload is the trie array; otherwise the route list itself is serialised and the router rebuilds the trie at boot — identical behaviour either way (transparency + mandatory fallback).
+Takes the priority-sorted route list from `RouterInterface::getRoutes()` and writes a PHP artifact that `return`s the rehydrated payload (`base64_decode` + `unserialize` restricted with `allowed_classes: [MatchedRoute::class]`, so a tampered artifact cannot instantiate arbitrary classes). When the optional `$trieCompiler` closure is wired (the app may reference `RouteTrie::build($routes)->toArray()`), the serialised payload is the trie array; otherwise the route list itself is serialised and the router rebuilds the trie at boot — identical behaviour either way (transparency + mandatory fallback).
 
 Default artifact path **`var/cache/routes.trie.php`**, overridable with the positional `artifact-path` argument. Returns `ExitCode::SUCCESS` (`0`), `ExitCode::CONFIG` (`78`) on a write failure, or `ExitCode::FAILURE` (`1`) when discovery throws.
 
