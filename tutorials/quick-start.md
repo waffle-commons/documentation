@@ -313,6 +313,7 @@ Under classic PHP SAPI (when `frankenphp_handle_request` doesn't exist), the han
 
 ## 7. What's next
 
+- Continue the tutorial track: [Your First Secured CRUD Endpoint](first-secured-crud-endpoint.md) (fail-closed ABAC, CSRF, a pooled transactional write), then [First Steps with Async Work and Telemetry](first-async-and-telemetry.md).
 - Validate input natively: §4 above shows `#[Dto]` + Property Hooks; [How-To: Error Handling](../how-to/error-handling.md) covers how a hook rejection becomes an RFC 7807 `422`.
 - Route a gateway catch-all: [How-To: Routing](../how-to/routing.md) documents the `priority` parameter and `{path:.*}` multi-segment matching used by the edge-gateway pattern.
 - Tighten security: see [How-To: Secure a Controller](../how-to/secure-a-controller.md).
