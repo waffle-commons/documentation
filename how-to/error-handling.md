@@ -57,13 +57,15 @@ In production mode any 5xx `detail` is masked to `"An internal server error occu
 
 ## 3. Use contract interfaces to pick the HTTP status
 
-`JsonErrorRenderer::determineStatusCode()` walks **interfaces**, not exception classes — your application exceptions opt into a specific status by implementing the right contract interface. The built-in mappings:
+`JsonErrorRenderer::determineStatusCode()` walks **interfaces**, not exception classes — your application exceptions opt into a specific status by implementing the right contract interface. The built-in mappings, in precedence order:
 
-| Interface | HTTP status |
+| Rule | HTTP status |
 | :--- | :--- |
+| `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface` (always wins, regardless of code) | `422` |
+| Exception `getCode()` already a valid HTTP error status (`400`–`599`) | that code |
 | `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundExceptionInterface` | `404` |
-| `Waffle\Commons\Contracts\Exception\Validation\ValidationExceptionInterface` | `422` |
-| `\InvalidArgumentException` (or implementors of `Waffle\Commons\Contracts\Console\Exception\InvalidArgumentExceptionInterface`) | `400` |
+| `Waffle\Commons\Contracts\Routing\Exception\MethodNotAllowedExceptionInterface` | `405` |
+| `\InvalidArgumentException` | `400` |
 | Anything else | `500` |
 
 ```php

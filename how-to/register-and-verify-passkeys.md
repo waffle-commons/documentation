@@ -134,6 +134,6 @@ Every one of these is an `AuthExceptionInterface`, so a single `catch (AuthExcep
 - [Explanation: WebAuthn & Passkeys](../explanation/webauthn-passkeys.md)
 - [Reference: WebAuthn / passkeys](../reference/webauthn.md)
 - [How to Authenticate Requests with the Universal Authentication Bridge](authentication.md) — the inbound bridge WebAuthn plugs into
-- [How to Secure Your Application](security.md) — authorization (ABAC voters) after authentication
+- [How to Secure a Controller](secure-a-controller.md) — authorization (ABAC voters) after authentication
 
 > *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*

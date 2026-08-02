@@ -144,4 +144,4 @@ A non-Waffle monolith needs ~40 lines of plain PHP — see the reference impleme
 
 - [Explanation: The Universal Authentication Bridge](../explanation/authentication-universal-bridge.md)
 - [Reference: Auth component](../reference/auth.md)
-- [How to Secure Your Application](security.md) (authorization — ABAC voters)
+- [How to Secure a Controller](secure-a-controller.md) (authorization — ABAC voters)

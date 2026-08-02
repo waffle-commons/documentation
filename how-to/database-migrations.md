@@ -9,7 +9,7 @@ Add a `database` block to `config/app.yaml`. Credentials come from the environme
 ```yaml
 waffle:
   database:
-    driver: 'pgsql'                 # pgsql (default) | mysql/mariadb | sqlite | sqlsrv | oci
+    driver: 'pgsql'                 # pgsql | mysql/mariadb (fallback when unset) | sqlite | sqlsrv | oci
     host: '%env(DB_HOST)%'
     port: '%env(DB_PORT)%'
     database: '%env(DB_NAME)%'
