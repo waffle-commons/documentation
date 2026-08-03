@@ -61,7 +61,7 @@ Symfony baseline was aligned to do exactly the same work rather than issue an
 `INSERT` the Waffle side never performs.
 
 Against the classic stack the difference is structural: Symfony on php-fpm collapses on
-database workloads between 100 and 200 rps — at 200 rps it completed 5 094 of 12 000
+database workloads between 100 and 200 rps — at 200 rps it completed 7 472 of 12 000
 scheduled requests — while the worker engines hold single-digit milliseconds.
 
 ### Throughput and memory against php-fpm
