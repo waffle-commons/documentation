@@ -48,11 +48,17 @@ saturates, so the table is per-step:
 
 | Workload | rps | A — Waffle worker | B — Symfony FPM | C — Symfony worker |
 |---|---:|---:|---:|---:|
-| static JSON | 400 | 1.2 | 2.2 | 1.1 |
+| static JSON | 200 | **1.5** | 2.3 | 1.5 |
 | static JSON | 800 | **1.0** | 587.8 | 1.3 |
-| DB read | 50 | 4.0 | 19.2 | 2.6 |
-| DB read | 200 | 2.9 | 4877 | 2.0 |
-| DB write | 200 | 2.9 | 3348 | 2.4 |
+| DB read | 50 | 4.3 | 26.3 | **2.8** |
+| DB read | 200 | 3.4 | 3311 | **1.9** |
+| DB transaction | 100 | 4.5 | 2467 | **2.8** |
+| DB transaction | 400 | 6.1 | 8185 | **3.0** |
+
+"DB transaction" is a transaction boundary plus one trivial statement on **every**
+engine — not a durable write. The public demo endpoint commits nothing, so the
+Symfony baseline was aligned to do exactly the same work rather than issue an
+`INSERT` the Waffle side never performs.
 
 Against the classic stack the difference is structural: Symfony on php-fpm collapses on
 database workloads between 100 and 200 rps — at 200 rps it completed 5 094 of 12 000
