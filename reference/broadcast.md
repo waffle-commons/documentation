@@ -173,4 +173,4 @@ The demo apps point the SSE sink at the container log, so the broadcast frames s
 
 The attribute, the mutation record, both transports' logic, and the flush listener are immutable. `RequestBroadcastBuffer` is the only stateful object and is explicitly recyclable via `reset()` / `drain()`; the kernel resets it between iterations. The component passes the `igor-php` worker-mode audit with zero findings — no per-request mutation bleeds across the FrankenPHP worker boundary.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

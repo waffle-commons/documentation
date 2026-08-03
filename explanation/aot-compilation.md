@@ -55,4 +55,4 @@ The hard requirement is **behavioural parity**, not merely "fast". The trie must
 
 The deliberate non-feature here is **fingerprinting** (AOT-04). The kernel's `CompiledContainerLoader` performs no cross-component hash comparison — it cannot tell whether an artifact matches the current code. A stale artifact would silently serve an outdated service graph, which is a worse failure than a slow boot. Rather than building a brittle invalidation system, Waffle makes the contract explicit: every successful AOT load emits a prominent `LoggerInterface::warning()` reminding the operator that the artifact is **not** validated against the current code and **must** be regenerated (`bin/waffle container:compile`) after *any* code change. The recommended discipline is to regenerate both artifacts as a build/deploy step, never by hand. See the [how-to](../how-to/enable-aot.md) for the exact pipeline placement.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

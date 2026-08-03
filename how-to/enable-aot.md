@@ -99,4 +99,4 @@ Unset `WAFFLE_AOT` (or set it to anything other than an on-value) and the kernel
 
 See the [AOT reference](../reference/aot.md) for the compiler and loader APIs, and the [console reference](../reference/console.md) for the full command surface.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

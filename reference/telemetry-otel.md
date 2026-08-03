@@ -105,4 +105,4 @@ The **one** `$tracer` is then injected into the HTTP client, the `TracingMiddlew
 
 Every adapter is `final readonly` and delegates the active-context stack to the OpenTelemetry context, holding no per-request state of its own; the component passes the `igor-php` worker-mode audit with zero findings.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -249,4 +249,4 @@ A tiny static type-coercion helper for the inherently-`mixed` returns of APCu an
 
 Every class in the component is `final readonly` with no accumulating field, and the only cumulative state — the metric counters — lives in APCu, outside the worker heap. The component passes the `igor-php` worker-mode audit with zero findings.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

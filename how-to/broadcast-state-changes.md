@@ -125,4 +125,4 @@ The frame is the SSE wire format (`event: <channel>\ndata: <json>\n\n`). In a re
 
 See the [broadcast reference](../reference/broadcast.md) for the full API (attribute, record, buffer, transport, listener) and [Explanation: Reactive State Broadcasting](../explanation/reactive-broadcast.md) for the design rationale. For the `TerminateEvent` lifecycle hook this builds on, see [How to Use Events](events.md).
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

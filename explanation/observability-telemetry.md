@@ -68,4 +68,4 @@ The whole telemetry surface passes the `igor-php` worker-mode audit with zero fi
 
 `Coerce`, a tiny type-narrowing helper, exists so the inherently-`mixed` returns of `apcu_fetch()` and `json_decode()` are narrowed with `is_*()` guards rather than cast — keeping the analyzer clean without a single suppression, per the zero-baseline mandate.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -63,4 +63,4 @@ In short: the framework supplies a typed, stateless, fail-closed shell; the audi
 - [The Universal Authentication Bridge](authentication-universal-bridge.md) — the inbound-scheme model WebAuthn plugs into
 - RFC-021 (monorepo `project_system/RFCs/`) — normative specification
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

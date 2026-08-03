@@ -1,5 +1,12 @@
 # How-To: Validate & Cleanse Input with `Assert`
 
+
+> **Access control is fail-closed.** The examples below show routing concerns only.
+> Waffle denies any action that carries no `#[Voter]` with a `403`, so each of them
+> additionally needs either a `#[Voter]` or an explicit `#[PublicAccess]` opt-out to
+> be reachable — see [Secure a controller](secure-a-controller.md).
+
+
 > **Goal:** validate *and* normalise request data declaratively, inside PHP 8.5 property hooks, with no validation library — using the stateless `Assert` helper from `waffle-commons/utils`.
 
 Waffle keeps input validation where it belongs: in the value object, expressed with a **Property Hook** (see [Quick Start §4](../tutorials/quick-start.md)). `Assert` makes that ergonomic for the common cases — each method **validates and returns the cleansed value**, so a whole field fits on one line.

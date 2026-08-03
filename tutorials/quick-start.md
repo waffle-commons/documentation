@@ -1,4 +1,4 @@
-# Quick Start Guide (`0.1.0-beta5`)
+# Quick Start Guide (`0.1.0-beta6`)
 
 Welcome to the Waffle Framework. This guide walks you through scaffolding a new project from the `waffle-commons/skeleton` template, writing your first controller, and understanding how the Kernel + Runtime fit together.
 
@@ -33,11 +33,17 @@ namespace App\Controller;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Waffle\Commons\Contracts\Routing\Attribute\Route;
+use Waffle\Commons\Contracts\Security\Attribute\PublicAccess;
 use Waffle\Core\BaseController;
 
 final class HelloController extends BaseController
 {
+    // Authorization is FAIL-CLOSED: an action carrying no #[Voter] is denied
+    // with a 403 unless it opts out explicitly. Every example below therefore
+    // marks its demo routes #[PublicAccess]; a real endpoint uses a #[Voter]
+    // instead (see the how-to on securing a controller).
     #[Route(path: '/hello/{name}', name: 'hello')]
+    #[PublicAccess]
     public function index(string $name): ResponseInterface
     {
         return $this->jsonResponse(data: ['message' => "Hello $name"]);
@@ -107,7 +113,12 @@ final class HelloInput
 Type-hint it in a controller action — hydration and validation happen *before* your code runs:
 
 ```php
-#[Route(path: '/greet', name: 'greet')]
+// `methods: ['POST']` is required — the default is GET/HEAD/OPTIONS, and DTO
+// hydration needs a request body, so the curl below would answer 405 without it.
+// `#[PublicAccess]` is required too: authorization is fail-closed, so an action
+// with no #[Voter] is denied 403 before it runs.
+#[Route(path: '/greet', methods: ['POST'], name: 'greet')]
+#[PublicAccess]
 public function greet(HelloInput $input): ResponseInterface
 {
     return $this->jsonResponse(data: ['message' => "Hello {$input->name}!"]);
@@ -170,20 +181,22 @@ final class RegistrationInput
 
 ## 5. The Kernel — assembled in your `AppKernelFactory`
 
-The skeleton's `src/Factory/AppKernelFactory.php` wires every component the kernel needs. The setter contract is verbatim from `Waffle\Abstract\AbstractKernel`:
+The skeleton's `src/Factory/AppKernelFactory.php` wires every component the kernel needs. Since **ARCH-03** every required collaborator is a mandatory constructor parameter, so a half-built kernel is unrepresentable — the older nullable-fields + `set*()` + `validateState()` machinery is gone:
 
 ```php
-public function setContainerImplementation(PsrContainerInterface $container): void;
-public function setConfiguration(ConfigInterface $config): void;
-public function setSecurity(SecurityInterface $security): void;
-public function setMiddlewareStack(MiddlewareStackInterface $stack): void;
-public function setEventDispatcher(EventDispatcherInterface $dispatcher): void;
+public function __construct(
+    public protected(set) ConfigInterface $config,
+    public protected(set) ContainerInterface $container,
+    protected SecurityInterface $security,
+    protected(set) MiddlewareStackInterface $middlewareStack,
+    protected LoggerInterface $logger = new NullLogger(),
+) {}
 ```
 
-The PSR-3 logger is passed to the constructor (default `NullLogger`):
+The event dispatcher is the ONE optional collaborator, so it stays a boot-time setter — that keeps the required-collaborator constructor within the five-parameter bound, and a missing dispatcher never leaves the kernel half-built (the lifecycle hooks simply no-op):
 
 ```php
-public function __construct(protected LoggerInterface $logger = new NullLogger())
+public function setEventDispatcher(EventDispatcherInterface $dispatcher): void;
 ```
 
 Sketch of a factory (Beta-2 wiring — CSRF subsystem inherited from Beta-1; the `OPTIONS` preflight auto-answer is enabled by passing the PSR-17 response factory to `CoreRoutingMiddleware`):
@@ -249,11 +262,13 @@ final class AppKernelFactory
             ->add(new SecurityMiddleware(new Security($config), $logger))
             ->add(new SecureHeadersMiddleware());
 
-        $kernel = new Kernel($logger);
-        $kernel->setConfiguration($config);
-        $kernel->setContainerImplementation($container);
-        $kernel->setSecurity(new Security($config));
-        $kernel->setMiddlewareStack($stack);
+        $kernel = new Kernel(
+            config: $config,
+            container: $container,
+            security: new Security($config),
+            middlewareStack: $stack,
+            logger: $logger,
+        );
         $kernel->setEventDispatcher(new EventDispatcher(new ListenerProvider()));
 
         return $kernel;

@@ -176,4 +176,4 @@ All sit under the bridge's exception tree, so a `catch (AuthExceptionInterface)`
 
 The adapter, ceremony service, inbound authenticator, option DTOs, value objects, and codecs are stateless / immutable — the WebAuthn surface adds zero per-request worker state. The only stateful collaborators are the app-provided `CredentialRepositoryInterface` and `WebAuthnChallengeStoreInterface`, which live in application storage, never in the worker. The component passes the `igor-php` worker-mode audit with zero findings.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -161,4 +161,4 @@ public function placeOrder(TaskRunnerInterface $runner): ResponseInterface
 
 For the integrator's recipe (wiring, the budget, when to reach for a real queue, and the fan-out variant) see [How to: Defer Post-Response Work](../how-to/defer-post-response-work.md).
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

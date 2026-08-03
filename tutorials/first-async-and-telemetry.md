@@ -202,4 +202,4 @@ curl -sk -H "Authorization: Bearer <your-token>" https://localhost/waffle-metric
 - Why a Fiber is an isolation boundary, not a thread: [Explanation: Finish-Request Deferral](../explanation/async-finish-request-deferral.md)
 - Why the SDK never enters the core: [Explanation: Contract-First Observability](../explanation/observability-telemetry.md)
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

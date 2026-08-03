@@ -172,4 +172,4 @@ WAFFLE_AOT=1 frankenphp run
 
 With `WAFFLE_AOT` unset, the kernel boots on the reflection container and live route discovery — the default dev path, entirely unaffected.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

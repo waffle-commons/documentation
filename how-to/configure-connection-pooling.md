@@ -145,4 +145,4 @@ See the [Connection Pool reference](../reference/connection-pool.md) for the ful
 
 ***
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

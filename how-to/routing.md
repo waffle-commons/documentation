@@ -1,5 +1,12 @@
 # How-To: Routing
 
+
+> **Access control is fail-closed.** The examples below show routing concerns only.
+> Waffle denies any action that carries no `#[Voter]` with a `403`, so each of them
+> additionally needs either a `#[Voter]` or an explicit `#[PublicAccess]` opt-out to
+> be reachable — see [Secure a controller](secure-a-controller.md).
+
+
 Waffle uses PHP 8 Attributes to define routes directly in your controller classes. This keeps your routing logic close to your application code.
 
 ## Defining a Route

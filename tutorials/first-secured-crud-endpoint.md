@@ -469,4 +469,4 @@ curl -sk "https://localhost/notes/<id-from-step-9>" -H "Authorization: Bearer $T
 - Pool sizing, heal-on-lease, reset semantics: [Explanation: Memory-Resident Connection Pooling](../explanation/connection-pooling.md)
 - Keep going with the next lesson: [First Steps with Async Work and Telemetry](first-async-and-telemetry.md)
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -62,4 +62,4 @@ Three invariants recur in every design decision above, and they are the shortest
 2. **Stateless across requests** — request-scoped state is resettable and audited (`wfl igor` 0 KO); memory-resident state is deliberate and reset-aware.
 3. **Nothing magic at runtime** — wiring is explicit in the application factory, AOT is an opt-in build step, and fail-closed is the default posture (ABAC, CORS, CSRF, the metrics endpoint).
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*
