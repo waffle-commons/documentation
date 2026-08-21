@@ -126,7 +126,7 @@ use Waffle\Commons\Console\ConsoleApplication;
 use Waffle\Commons\Console\Command\CacheClearCommand;
 use Waffle\Commons\Console\Command\RouteListCommand;
 
-$app = new ConsoleApplication(name: 'Waffle', version: '0.1.0-beta5');
+$app = new ConsoleApplication(name: 'My App', version: '1.0.0'); // your app's name/version
 
 $app->add(new CacheClearCommand($cache));
 $app->add(new RouteListCommand($router));

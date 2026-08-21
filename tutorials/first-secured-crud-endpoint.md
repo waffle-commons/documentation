@@ -1,4 +1,4 @@
-# Tutorial: Your First Secured CRUD Endpoint (`0.1.0-beta5`)
+# Tutorial: Your First Secured CRUD Endpoint (`0.1.0-beta6`)
 
 In this lesson you will build, from an empty directory, a `POST /notes` endpoint that is **denied by default**, then progressively earn access to it the Waffle way: an ABAC voter, a CSRF token, validated input via PHP 8.5 property hooks, and finally a database write that runs inside a pooled, failsafe transaction.
 

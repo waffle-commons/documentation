@@ -1,6 +1,6 @@
-# Waffle Components Reference (Beta-5)
+# Waffle Components Reference (Beta-6)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the in-progress `0.1.0-beta5` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` — plus `waffle-commons/utils` where declared, and any explicit additions in its own `composer.json` — a perimeter enforced by `mago guard` (see [Architecture](../explanation/architecture.md)).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the `0.1.0-beta6` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` — plus `waffle-commons/utils` where declared, and any explicit additions in its own `composer.json` — a perimeter enforced by `mago guard` (see [Architecture](../explanation/architecture.md)).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |
@@ -42,6 +42,31 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 Beta-3 introduces the **`waffle-commons/data`** component (RFC-022) — a worker-safe, ORM-free persistence layer — and the contracts that support it: `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface`, `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface`, and `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
 
 The Beta-3 cycle then completes the RFC-022 surface. In **contracts**: the SQR vocabulary (`Contracts\Data\Enum\{Operator, Direction}` — ⚠️ relocated from `Waffle\Commons\Data\Query` — plus the `QueryInterface` / `ComparisonInterface` / `OrderInterface` property-interfaces), the stateless `Contracts\Data\Repository\RepositoryInterface` (`find` / `findOne` / `stream`), and the CRUD write surface (`WritableRepositoryInterface`: `save` / `delete` / `findById`, through pure `DataMapperInterface` mappers). In **data**: all six relational dialects plus the MongoDB / key-value / Cassandra (CQL) / GraphQL compilers, seven typed repositories, live drivers, and the atomic flat-file JSON store — full type listing in [data.md](data.md), design rationale (ports-and-adapters drivers, the CQL transport situation, the workspace sandbox) in [Explanation: The Universal Data & Persistence Layer](../explanation/data-persistence.md). In **console**: `db:migrate` (concrete `MigrationRunner` wired by the app's `bin/waffle` — contracts-only edge, see [How to: Database Migrations](../how-to/database-migrations.md)), `data:warmup`, and the `make:entity` / `make:repository` makers (RFC-020) — see [console.md](console.md) and the [data CHANGELOG](../../data/CHANGELOG.md).
+
+## Beta-6 additions
+
+Beta-6 is the **stabilisation, audit and measurement** wave — it adds no new components. The contracts
+surface changes in exactly two ways, both from the audit remediation:
+
+- **Object-level ABAC (SEC-05).** New `Contracts\Security\SubjectResolverInterface` resolves the domain
+  subject a route parameter identifies, so voters can express object-level (anti-IDOR) rules instead of
+  reasoning about the request alone. Resolution is **lazy, voter-gated and fail-closed** — a
+  `#[PublicAccess]` route with no voters never invokes it, and a resolver failure denies with 403. See
+  [contracts.md](contracts.md), the [security reference](security.md), and
+  [How to: Secure a Controller](../how-to/secure-a-controller.md).
+- **⚠️ `#[PublicAccess]` is restricted to `Attribute::TARGET_METHOD`.** Class-level placement previously
+  exempted *every* method of a controller — including methods added later — which is the failure mode the
+  attribute exists to prevent. Class-level usage is now rejected by PHP when the attribute is
+  read; annotate each public method explicitly. See [attributes-public-access.md](attributes-public-access.md) and
+  [Explanation: Fail-Closed ABAC](../explanation/security-fail-closed-abac.md).
+
+The remaining fifteen gate-blocking findings were fixed **inside** the components without changing their
+public contracts — SQL/CQL identifier quoting on write paths, Maker codegen injection, route-cache
+deserialization, a `BasicAuthenticator` timing oracle, the HS* secret length floor, upload-path
+containment, fail-secure YAML parsing, escape-by-default controller string returns, validate-before-cast
+route parameters, and AOT/interpreted container reset parity. Per-component detail lives in each
+CHANGELOG; the measured runtime numbers are in
+[Explanation: Performance Strategy](../explanation/performance.md).
 
 ## Beta-5 additions
 

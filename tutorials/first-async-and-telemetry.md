@@ -1,4 +1,4 @@
-# Tutorial: First Steps with Async Work and Telemetry (`0.1.0-beta5`)
+# Tutorial: First Steps with Async Work and Telemetry (`0.1.0-beta6`)
 
 In this lesson you will take work **off the user-perceived latency path** with Waffle's finish-request deferral (`waffle-commons/async`), then make the resident worker **observable**: you will scrape the Prometheus `/waffle-metrics` endpoint, watch its counters grow, and read the memory and pool gauges that prove the worker stays flat between requests.
 
