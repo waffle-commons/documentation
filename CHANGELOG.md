@@ -10,7 +10,7 @@ Released in lockstep with the Waffle Commons umbrella tag.
 > Entries begin at `0.1.0-beta6`, when this changelog was introduced; earlier tags
 > (`0.1.0-alpha5` → `0.1.0-beta5`) exist but were not accompanied by release notes here.
 
-## [0.1.0-beta6] — 2026-08-22
+## [0.1.0-beta6] — 2026-09
 
 **Theme: the documentation is made to describe the code that actually exists (AXE 3).**
 
