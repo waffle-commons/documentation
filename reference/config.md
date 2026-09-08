@@ -1,6 +1,6 @@
 # Config Reference (`waffle-commons/config`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Beta-1 hardening retained: no process-env mutation*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Beta-1 hardening retained: no process-env mutation*
 > **Requires:** `ext-yaml` (the native PECL YAML extension)
 
 Loads application configuration from YAML files using the native `ext-yaml` extension with `yaml.decode_php = 0` (no PHP-deserialisation gadgets). Environment overlays merge via `array_replace_recursive`; `%env(VAR_NAME)%` placeholders are resolved at load time against a **read-only env registry injected through the constructor** — never against `getenv()` or `$_ENV` directly.
@@ -117,7 +117,7 @@ Pass `Failsafe::ENABLED` to skip filesystem loading entirely and use the safe ba
 
 ## Sibling classes
 
-- `Waffle\Commons\Config\YamlParser` — `final` wrapper around `yaml_parse_file()`.
+- `Waffle\Commons\Config\YamlParser` — `final` wrapper around `yaml_parse_file()` (implements `Contracts\Parser\YamlParserInterface`). Missing/unreadable/empty files are lenient (`[]`), but a genuinely malformed YAML file raises `InvalidConfigurationException` (via a warning-to-exception error handler) and **propagates uncaught** — a bad config file fails the boot, it is never silently swallowed. Refuses to run when `yaml.decode_php = 1`.
 - `Waffle\Commons\Config\DotEnv` — **Beta 1**: pure `.env` / `.env.local` parser. `load(): array<string,string>` returns the parsed map; **no longer mutates** `putenv()`, `$_ENV`, or `$_SERVER`. Within DotEnv itself, the first file wins on key conflict (`.env` beats `.env.local`). Boolean-typed keys (`APP_DEBUG`, `DEBUG`) are validated + normalized to `'1'`/`'0'`; invalid values throw `InvalidArgumentException`.
 - `Waffle\Commons\Config\Trait\ParserTrait` — shared parse helpers.
 - `Waffle\Commons\Config\Exception\InvalidConfigurationException` — implements `InvalidConfigurationExceptionInterface`.

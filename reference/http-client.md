@@ -1,6 +1,6 @@
 # HTTP Client Reference (`waffle-commons/http-client`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; SEC-02 SSRF guard (resolve → validate → pin)
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; SEC-02 SSRF guard (resolve → validate → pin)
 > **PSR Compliance:** PSR-18 (`Psr\Http\Client\ClientInterface`), consumes PSR-7 messages, PSR-17 factories
 
 A high-performance PSR-18 HTTP client tuned for FrankenPHP resident-worker proxying. Holds a persistent `\CurlHandle` and `\CurlMultiHandle`, reused via `curl_reset()` across every `sendRequest()` so libcurl's DNS cache and keep-alive pool stay warm. The transfer is driven through the multi interface (`curl_multi_exec` + `curl_multi_select`) rather than the blocking `curl_exec()`, so the worker parks on a socket-level wait instead of busy-spinning. Bodies stream in 8 KiB chunks **in both directions** — request bodies are pulled from the PSR-7 request stream, response bodies pushed into a PSR-7 stream — so neither is materialised whole in worker memory.
@@ -10,21 +10,30 @@ A high-performance PSR-18 HTTP client tuned for FrankenPHP resident-worker proxy
 ```php
 namespace Waffle\Commons\HttpClient;
 
-final readonly class Client implements ClientInterface
+final readonly class Client implements ClientInterface, ConcurrentClientInterface
 {
     public const int CONNECT_TIMEOUT_MS = 1_000;
     public const int TIMEOUT_MS         = 10_000;
     public const int CHUNK_SIZE         = 8_192;
 
     public function __construct(
-        private ResponseFactoryInterface $responseFactory,
-        private StreamFactoryInterface   $streamFactory,
-        private ?SsrfGuard               $ssrfGuard = null, // SEC-02: opt-in SSRF defence
+        private ResponseFactoryInterface   $responseFactory,
+        private StreamFactoryInterface     $streamFactory,
+        private ?SsrfGuard                 $ssrfGuard = null,  // SEC-02: opt-in SSRF defence
+        private TracerInterface            $tracer = new NullTracer(),                 // Beta-5 telemetry
+        private TextMapPropagatorInterface $propagator = new NullTextMapPropagator(),  // W3C trace context
     );
 
     public function sendRequest(RequestInterface $request): ResponseInterface;
+
+    /** @return array<array-key, ResponseInterface> Concurrent fan-out (Beta-5 / ASYNC). */
+    public function sendRequests(array $requests): array;
+
+    public function promise(RequestInterface $request): PromiseInterface;
 }
 ```
+
+`sendRequest()` wraps every transfer in a CLIENT span and injects W3C trace context onto the outbound request (no-op with the default `NullTracer`/`NullTextMapPropagator`). The concurrent surface comes from `Waffle\Commons\Contracts\HttpClient\ConcurrentClientInterface`: `sendRequests()` drives several transfers on the shared multi handle at once, and `promise()` returns a lazy `PromiseInterface` (`state()`, `then()`, `catch()`, `wait(): ResponseInterface`).
 
 ## Beta-1 / SEC-03 — SSRF protocol allowlist
 
@@ -75,7 +84,7 @@ The client enforces a security baseline that callers cannot lower:
 
 ## Transfer model (non-blocking)
 
-`execute()` adds the easy handle to the persistent multi handle, then loops `curl_multi_exec()` / `curl_multi_select()` until the transfer completes — the worker waits on the socket set, never busy-spinning a CPU and never blocking inside `curl_exec()`. The per-transfer result is read from `curl_multi_info_read()`; a `CURLM_*`-level failure maps to `NetworkException`. The easy handle is removed from the multi handle in a `finally` block, but both handles persist across requests so keep-alive survives. The multi handle is also the foundation for future concurrent fan-out.
+`execute()` adds the easy handle to the persistent multi handle, then loops `curl_multi_exec()` / `curl_multi_select()` until the transfer completes — the worker waits on the socket set, never busy-spinning a CPU and never blocking inside `curl_exec()`. The per-transfer result is read from `curl_multi_info_read()`; a `CURLM_*`-level failure maps to `NetworkException`. The easy handle is removed from the multi handle in a `finally` block, but both handles persist across requests so keep-alive survives. The same multi handle powers the shipped concurrent fan-out (`sendRequests()` / `promise()`).
 
 ## Streaming model
 

@@ -1,6 +1,6 @@
 # Routing Reference (`waffle-commons/routing`)
 
-> **Release:** `0.1.0-beta5`
+> **Release:** `0.1.0-beta6`
 
 Attribute-driven router. Routes live next to the controller code via the `#[Route]` attribute; the `RouteDiscoverer` scans the configured controller directory at boot time and the compiled table is cached.
 
@@ -35,7 +35,7 @@ final readonly class Route
 
 | Parameter | Type | Default | Purpose |
 | :--- | :--- | :--- | :--- |
-| `path` | `string` | (required) | URL pattern. Use `{name}` for placeholders, `{name:regex}` for a constrained placeholder, and `{name:.*}` for a multi-segment catch-all — captured values land in `$request->getAttribute('_route_params')`. |
+| `path` | `string` | (required) | URL pattern. Use `{name}` for placeholders, `{name:regex}` for a constrained placeholder, and `{name:.*}` for a multi-segment catch-all — captured values land in `$request->getAttribute('_params')`. |
 | `methods` | `array<string>` | `['GET']` | Allowed HTTP methods (e.g. `['GET', 'POST']`). If empty (`[]`), the route accepts any HTTP method. Matching is case-insensitive, and methods are upper-cased + de-duplicated at discovery. A `GET` route also answers `HEAD` (RFC 7231 §4.3.2), and `OPTIONS` is auto-served — see [HTTP Method Filtering](#http-method-filtering--route-overloading). |
 | `name` | `?string` | `null` | Unique route name. Used for debugging and the `route:list` console command. |
 | `arguments` | `?array<mixed>` | `null` | Container-resolved argument injection (see below). |
@@ -182,10 +182,11 @@ A genuine `405` (a non-OPTIONS method mismatch) bubbles to the global `ErrorHand
 | Class | Responsibility |
 | :--- | :--- |
 | `Waffle\Commons\Routing\Router` | The router entry point. Boots from the container, compiles the route table. |
-| `Waffle\Commons\Routing\RouteDiscoverer` | Walks the controller directory (`waffle.paths.controllers` in `app.yaml`), resolves each file's FQCN via `Waffle\Commons\Utils\Service\ClassParser`, and reads `#[Route]` attributes via native `ReflectionClass`/`ReflectionMethod`. |
-| `Waffle\Commons\Routing\ControllerFinder` | Filesystem traversal of `*.php` files. |
-| `Waffle\Commons\Routing\RouteParser` | Converts a `Route` attribute + native reflection metadata into a `MatchedRoute` DTO (method-level `priority` overrides the class-level default). |
-| `Waffle\Commons\Routing\Trait\RequestTrait` | Helpers for extracting routing metadata (`_controller`, `_route_params`) from a PSR-7 request. |
+| `Waffle\Commons\Routing\RouteDiscoverer` | Orchestrates discovery over the controller directory (`waffle.paths.controllers` in `app.yaml`): feeds each FQCN found by `ControllerFinder` through `RouteParser` and aggregates the resulting `MatchedRoute` list. |
+| `Waffle\Commons\Routing\ControllerFinder` | Filesystem traversal of `*.php` files; resolves each file's FQCN via `Waffle\Commons\Utils\Service\ClassParser`. |
+| `Waffle\Commons\Routing\RouteParser` | Reads `#[Route]` attributes via native `ReflectionClass`/`ReflectionMethod` and converts them into `MatchedRoute` DTOs (method-level `priority` overrides the class-level default). |
+| `Waffle\Commons\Routing\Trie\RouteTrie` | AOT fast path (RFC-019): a pre-compiled static/dynamic route trie with `match(string $method, string $path): ?MatchedRoute` and `toArray()` for artifact emission — see [aot.md](aot.md). |
+| `Waffle\Commons\Routing\Trait\RequestTrait` | Small helper trait (`getPathUri(string $path): string[]` — splits a path into segments). |
 
 ## Configuration
 
@@ -202,8 +203,9 @@ waffle:
 
 When `CoreRoutingMiddleware` runs successfully, the following attributes are present on the request when the controller is invoked:
 
-- `_controller` — the FQCN of the resolved controller class.
+- `_classname` — the FQCN of the resolved controller class.
 - `_method` — the controller method name to invoke.
-- `_route_params` — `array<string, mixed>` of `{placeholder}` values extracted from the path.
-
-The `Waffle\Commons\Routing\Trait\RequestTrait` provides typed accessors for these.
+- `_arguments` — `array<string, mixed>` of per-argument metadata from `#[Argument]`.
+- `_path` — the original route path pattern (e.g. `/users/{id}`).
+- `_name` — the route name from `#[Route(name: ...)]`.
+- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the path.

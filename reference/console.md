@@ -1,6 +1,6 @@
 # Console Reference (`waffle-commons/console`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Adds the `security:compare-audit` timing-safety gate (SEC-03)*
 
 A minimalist, zero-magic CLI runtime (RFC-012). Commands are registered **explicitly** at boot — no auto-discovery — and resolve their dependencies through constructor injection.
 
@@ -34,17 +34,19 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | :--- | :--- | :--- |
 | `Waffle\Commons\Console\Command\CacheClearCommand` | `cache:clear` | Flushes the configured `CacheInterface` backend (route cache, security tokens). |
 | `Waffle\Commons\Console\Command\RouteListCommand` | `route:list` | Renders the compiled route table. |
-| `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks controllers and prints the resolved access ladder (`#[Rule]` / `#[Voter]`). |
+| `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks every registered route and prints its `#[Voter]` / CSRF coverage; exits non-zero when any route is unguarded. |
 | `Waffle\Commons\Console\Command\SensitiveComparisonAuditCommand` | `security:compare-audit` | *Added in Beta-4 (SEC-03).* Scans source (via `SensitiveComparisonScanner`, a `token_get_all` pass) for naive `===`/`!==` on secret/token/HMAC/signature operands that must use `hash_equals()`; returns a non-zero exit on findings. Also exposed monorepo-wide as `wfl compare-audit`. |
 | `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
 | `Waffle\Commons\Console\Command\MemoryAuditCommand` | `igor:audit` | Streams the monorepo-wide Igor memory-leak & state-mutation audit (`igor.sh`). Thin command depending only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`; the `proc_open` engine lives in `waffle-commons/runtime`. Distinct from `security:audit` (which audits ABAC/CSRF). See [§ `igor:audit`](#igoraudit) below. |
+| `Waffle\Commons\Console\Command\ContainerCompileCommand` | `container:compile` | *Added in Beta-5 (AOT-01, RFC-019).* Emits the graph-identical, reflection-free compiled container. Documented with the AOT build step in [aot.md](aot.md). |
+| `Waffle\Commons\Console\Command\RouteCompileCommand` | `route:compile` | *Added in Beta-5 (AOT-02, RFC-019).* Serialises the `RouteTrie` into a PHP artifact (hardened `unserialize` with an `allowed_classes` allow-list). See [aot.md](aot.md). |
 | `Waffle\Commons\Console\Command\DataWarmupCommand` | `data:warmup` | *Added in Beta-3.* Invokes every registered `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface`: compiled artifacts (parameterised SQL from SQR trees, routing tables, …) are serialised into PHP cache files and primed into OPcache shared memory, removing compilation and disk I/O from the first live request. Idempotent and strictly CLI-side; applications wire their warmers (e.g. `data`'s `QueryWarmer`) in `bin/waffle`. See [data.md → Warmup](data.md#warmup--wafflecommonsdatawarmupquerywarmer). |
 
 All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` and `DataWarmupCommand` depend only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`, `DataWarmerInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
 
 ## Waffle Maker commands (RFC-020)
 
-Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every maker extends `AbstractMakerCommand` (PSR-4 namespace discovery from the nearest `composer.json`, atomic file writes, refuses to overwrite without `--force`/`-f`, `--target=DIR` to override the destination — otherwise `src/<Subfolder>` of the current package):
+Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every maker extends `AbstractMakerCommand` (PSR-4 namespace discovery from the nearest `composer.json`, atomic file writes, refuses to overwrite without `--force`/`-f`, `--target=DIR` to override the destination — otherwise `src/<Subfolder>` of the current package). Inputs are hardened: every CLI-derived class name / field name is validated as a PHP identifier (`assertValidIdentifier()` — invalid names throw `\InvalidArgumentException`), and every generated file is linted with `php -l` before it is placed at its final path:
 
 | Command | Generates |
 | :--- | :--- |
@@ -124,7 +126,7 @@ use Waffle\Commons\Console\ConsoleApplication;
 use Waffle\Commons\Console\Command\CacheClearCommand;
 use Waffle\Commons\Console\Command\RouteListCommand;
 
-$app = new ConsoleApplication(name: 'Waffle', version: '0.1.0-beta5');
+$app = new ConsoleApplication(name: 'My App', version: '1.0.0'); // your app's name/version
 
 $app->add(new CacheClearCommand($cache));
 $app->add(new RouteListCommand($router));

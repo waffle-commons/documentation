@@ -1,6 +1,6 @@
 # Telemetry OTel Bridge Reference (`waffle-commons/telemetry-otel`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *The sole OpenTelemetry-SDK importer; binds the tracing contracts (OBS-01, RFC-005, AXE5)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *The sole OpenTelemetry-SDK importer; binds the tracing contracts (OBS-01, RFC-005, AXE5)*
 > **Requires:** PHP 8.5+, `open-telemetry/api` (`^1.0`), `open-telemetry/sdk` (`^1.0`). Depends on `waffle-commons/contracts`.
 
 The OpenTelemetry binding for Waffle's tracing contracts. This is the **only** package in the ecosystem that imports an `OpenTelemetry\*` symbol — the framework core and the demo apps only ever see `Waffle\Commons\Contracts\Telemetry\TracerInterface` and friends, so the SDK is quarantined to this perimeter (the `mago guard` rule that keeps every other component on `contracts` alone). It is **opt-in**: an application adds it as a dependency only when it wants distributed tracing; metrics (Prometheus) are a separate, SDK-free choice in [`waffle-commons/telemetry`](telemetry.md).
@@ -105,4 +105,4 @@ The **one** `$tracer` is then injected into the HTTP client, the `TracingMiddlew
 
 Every adapter is `final readonly` and delegates the active-context stack to the OpenTelemetry context, holding no per-request state of its own; the component passes the `igor-php` worker-mode audit with zero findings.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

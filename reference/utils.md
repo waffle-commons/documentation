@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
@@ -12,6 +12,7 @@ Pure-function helper services used across the ecosystem. No I/O. No state across
 | `Waffle\Commons\Utils\Service\AttributeReader` | Wraps PHP 8 `ReflectionClass::getAttributes()` with type-safe convenience helpers. |
 | `Waffle\Commons\Utils\Service\ReflectionInspector` | Helper for parameter / return-type / promoted-property inspection. |
 | `Waffle\Commons\Utils\Assert` | Static entry point for input validation **and** cleansing — drops straight into PHP 8.5 property-hook setters. |
+| `Waffle\Commons\Utils\Validation\AssertValidator` | Injectable `ValidatorInterface` (DX-05) wrapping the static `Assert` facade: runs a `SelfValidatingInterface` object's `assertValid()` and converts the first thrown violation into a `ValidationResult` (with `Violation` entries). Mockable in tests. |
 
 The three `Service\*` classes are `final readonly`. None of them touch superglobals or filesystem state beyond what's passed to them explicitly. `Assert` has its own section below.
 

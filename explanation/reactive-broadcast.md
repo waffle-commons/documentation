@@ -75,4 +75,4 @@ The SSE transport also **sanitizes the channel** before interpolating it into th
 
 The whole reactive path is stateless except for the buffer. `RequestBroadcastBuffer` holds one `list<MutationRecord>` and **directly declares `implements ResettableInterface`** — not merely transitively through `BroadcastBufferInterface` — because the shallow worker-safety audit requires the explicit clause on the concrete class. The kernel empties the buffer between worker iterations (and `drain()`/`reset()` both clear it), so a mutation recorded in request A can never bleed into request B. `igor-php` confirms this with zero findings: the attribute, the record, the transport, and the listener are all immutable, and the one stateful object recycles cleanly.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

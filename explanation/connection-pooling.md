@@ -60,4 +60,4 @@ This is the same discipline as the rest of the persistence layer (see [The Unive
 
 ***
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -1,6 +1,6 @@
 # Log Reference (`waffle-commons/log`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *No behavioural changes since Beta-1*
 > **PSR Compliance:** PSR-3 (`Psr\Log\LoggerInterface`, `AbstractLogger`)
 
 PSR-3 logger that emits JSON-formatted records to a stream. Optimised for Docker / Kubernetes deployments where logs are collected from `stdout` / `stderr`.
@@ -37,29 +37,31 @@ The constructor opens the stream in `ab` mode (append-binary). If the stream can
 
 ## Record shape
 
-Every line is a single JSON object — newline-delimited, log-collector friendly:
+Every line is a single JSON object — newline-delimited, Monolog-shaped, log-collector friendly:
 
 ```json
 {
-  "@timestamp": "2026-03-22T11:42:00+00:00",
-  "level":      "info",
-  "level_code": 200,
   "channel":    "app",
   "message":    "Order #42 created",
-  "context":    { "order_id": 42, "user_id": 7 }
+  "context":    { "order_id": 42, "user_id": 7 },
+  "level":      200,
+  "level_name": "INFO",
+  "datetime":   "2026-03-22T11:42:00.000+00:00",
+  "extra":      []
 }
 ```
 
 | Field | Source |
 | :--- | :--- |
-| `@timestamp` | `new DateTimeImmutable()->format(DateTimeInterface::ATOM)`. |
-| `level` | The PSR-3 level (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). |
-| `level_code` | RFC 5424 / Monolog-compatible integer (`debug=100` … `emergency=600`). |
 | `channel` | The channel passed to the constructor. |
 | `message` | The interpolated message (PSR-3 placeholder substitution). |
 | `context` | The full context array passed by the caller. |
+| `level` | RFC 5424 / Monolog-compatible integer (`debug=100`, `info=200`, `notice=250`, `warning=300`, `error=400`, `critical=500`, `alert=550`, `emergency=600`; unknown level → `0`). |
+| `level_name` | The upper-cased PSR-3 level string (`DEBUG` … `EMERGENCY`). |
+| `datetime` | `new DateTimeImmutable()->format(DateTimeInterface::RFC3339_EXTENDED)` (millisecond precision). |
+| `extra` | Always `[]` — placeholder for future extensibility. |
 
-If a context value is `Stringable`, it's coerced via `(string) $value`. Otherwise it's serialised as-is by `json_encode(JSON_UNESCAPED_SLASHES \| JSON_INVALID_UTF8_SUBSTITUTE \| JSON_PARTIAL_OUTPUT_ON_ERROR)`.
+The record is serialised with `json_encode(JSON_THROW_ON_ERROR \| JSON_UNESCAPED_SLASHES \| JSON_UNESCAPED_UNICODE)`. If encoding fails (recursion, binary data in `context`), the logger never crashes the app: it writes a fallback `critical` record (`"Log Serialization Failed: …"`) instead. During placeholder interpolation, only scalar-castable context values (non-arrays; objects with `__toString()`) are substituted into the message.
 
 ## `LogChannel` — predefined channels
 

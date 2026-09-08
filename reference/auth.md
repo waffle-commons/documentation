@@ -63,7 +63,7 @@ Universal Authentication Bridge — RFC-021. Contracts live in
 | `Authenticator\BasicAuthenticator` | `__construct(array<string, string> $users, list<string> $roles = [])` — `password_verify()` for hashes, `hash_equals()` for opaque tokens. |
 | `Jwt\JwtValidator` | `__construct(JwtConfig $config, KeyResolverInterface $keys, JwtParser $parser = new JwtParser())` — allow-list, no `none`, no HS/RS confusion, `exp`/`nbf`/`iat` + leeway, `iss`/`aud`, OIDC `nonce`. |
 | `Jwt\JwtConfig` | `__construct(list<string> $algorithms, string $issuer, string $audience, int $leeway = 0, ClaimMapping $mapping = new ClaimMapping())` — supported: `HS256`, `RS256`. |
-| `Jwt\Key\StaticKeyResolver` | `__construct(array<string, string> $keysByAlgorithm)`. |
+| `Jwt\Key\StaticKeyResolver` | `__construct(#[\SensitiveParameter] array<string, string> $keysByAlgorithm)` — fail-closed boot: an `HS*` secret missing/empty/shorter than `Constant::MIN_SECRET_BYTES` (32) throws `MissingAuthSecretException` at construction (PEM keys for RS/ES are exempt). |
 | `Jwt\Key\JwksKeyResolver` | `__construct(string $jwksUri, ClientInterface $http, RequestFactoryInterface $requests, CacheInterface $cache, int $cacheTtl = 3600)` — RS256 only, `kid` selection, JWK→PEM via `JwkConverter`. |
 | `Oauth\OauthClient` | `__construct(OauthConfig $config, ClientInterface $http, RequestFactoryInterface $requests, StreamFactoryInterface $streams)` — auth-code + PKCE S256, client-credentials. |
 | `Oauth\OidcDiscovery` | `.well-known/openid-configuration` → `ProviderMetadata`, PSR-16 cached, issuer pinning (RFC 8414 §3.3). |
@@ -78,5 +78,5 @@ Universal Authentication Bridge — RFC-021. Contracts live in
 
 ## Quality gates
 
-`composer mago` (zero baselines) · `composer tests` (190 tests, 100% statement coverage) ·
+`composer mago` (zero baselines) · `composer tests` (249 tests, ≥95% statement coverage) ·
 `composer igor` (Worker-Mode compatible — zero state errors).

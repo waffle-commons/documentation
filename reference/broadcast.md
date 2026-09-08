@@ -1,6 +1,6 @@
 # Broadcast Reference (`waffle-commons/waffle` + contracts)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Reactive state broadcasting via PHP 8.5 property write-hooks (REACTIVE-01, RFC-018, AXE3)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Reactive state broadcasting via PHP 8.5 property write-hooks (REACTIVE-01, RFC-018, AXE3)*
 > **Requires:** PHP 8.5+. The contracts vocabulary lives in `waffle-commons/contracts`; the concretes ship in `waffle-commons/waffle`. No external transport SDK is pulled into core.
 
 Reactive broadcasting turns a flagged property mutation into a real-time push without performing I/O at mutation time. A `#[Broadcast]` `set` write-hook enqueues an immutable `MutationRecord` into a request-scoped buffer; a finish-request listener drains the buffer and publishes the batch over a transport (SSE by default), after the response cycle. Hooked properties cannot be `readonly` in PHP 8.5, so broadcasting applies to mutable DTOs (`final class` + `public private(set)`) only — never to `final readonly` value objects.
@@ -173,4 +173,4 @@ The demo apps point the SSE sink at the container log, so the broadcast frames s
 
 The attribute, the mutation record, both transports' logic, and the flush listener are immutable. `RequestBroadcastBuffer` is the only stateful object and is explicitly recyclable via `reset()` / `drain()`; the kernel resets it between iterations. The component passes the `igor-php` worker-mode audit with zero findings — no per-request mutation bleeds across the FrankenPHP worker boundary.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

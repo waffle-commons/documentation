@@ -1,39 +1,29 @@
 # How-To: Secure a Controller
 
-> **Beta 1** — Waffle ships three complementary security layers: a **global security level** (the rule ladder), **per-method attributes** (`#[Rule]`, `#[Voter]`, `#[RequiresCsrfToken]`, `#[PublicAccess]`) for finer-grained control, and a **fail-closed ABAC default** that denies any action without an explicit policy.
+> Waffle ships two complementary authorization layers: a **global security level** (the object-integrity rule ladder applied by the `SecureContainer`) and **per-method attributes** (`#[Voter]`, `#[RequiresCsrfToken]`, `#[PublicAccess]`) for request-level control — with a **fail-closed ABAC default** that denies any action without an explicit policy.
+
+> **Authentication vs. authorization.** This page covers **authorization** (*may you do
+> this?* — `waffle-commons/security`). Establishing *who* the caller is — OAuth2/OIDC,
+> JWT Bearer, gateway assertions, API keys, passkeys — is the job of the **Universal
+> Authentication Bridge** (`waffle-commons/auth`, RFC-021): see
+> [How to Authenticate Requests](authentication.md).
 
 ## 1. Configure the global security level
 
-The kernel reads `waffle.security.level` from `config/app.yaml` and constructs `Waffle\Commons\Security\Security` with it. Levels are integers from `1` (public) to `10` (paranoid).
+The security level defines the base rigorousness of the **object-integrity** checks performed on every object the `SecureContainer` resolves. The kernel reads `waffle.security.level` from `config/app.yaml` and constructs `Waffle\Commons\Security\Security` with it. Levels are integers from `1` (permissive) to `10` (strictest).
 
 ```yaml
 # config/app.yaml
 waffle:
   security:
-    level: 5      # see Constant::SECURITY_LEVEL1 … SECURITY_LEVEL10
+    level: 10     # 1 = permissive … 10 = strictest object-integrity checks
 ```
 
-When `SecurityMiddleware` runs the resolved controller through `Security::analyze()`, every `LevelNRule` from 1 up to your configured level is evaluated. Any `LevelNRule::isValid()` returning `false` raises a `SecurityExceptionInterface`, which the `ErrorHandlerMiddleware` renders as HTTP `403`.
+When a service is pulled from the container, `SecureContainer::get()` runs it through `Security::analyze()`: every `LevelNRule` from 1 up to your configured level is evaluated, and any rule returning `false` raises a `SecurityExceptionInterface`, which the `ErrorHandlerMiddleware` renders as HTTP `403`.
 
-## 2. Tighten with `#[Rule]` on a method or class
+## 2. Know the two authorization layers
 
-Use `Waffle\Commons\Contracts\Security\Attribute\Rule` to declare the **minimum** security level a route requires. If the kernel's effective level is below that, execution is denied.
-
-```php
-use Waffle\Commons\Contracts\Security\Attribute\Rule;
-use Waffle\Commons\Contracts\Constant\Constant;
-
-final class AdminController
-{
-    #[Rule(level: Constant::SECURITY_LEVEL10)]
-    public function dropDatabase(): ResponseInterface
-    {
-        // Only reachable when the kernel's level >= 10.
-    }
-}
-```
-
-Class-level `#[Rule]` applies to every method on the class; method-level `#[Rule]` overrides the class default for that method.
+There is **no per-route `#[Rule]` attribute**. The level ladder above is an application-wide *structural* gate — it asks whether an object is well-formed and safe to wire, independent of who is calling. Per-route access control is carried entirely by context-aware **`#[Voter]` attributes** (next section), which see the authenticated identity and the resource under decision. The two layers are complementary, not redundant — see [The Two Authorization Layers](../explanation/security-two-layer-authorization.md) for why both `analyze()` entry points exist.
 
 ## 3. ABAC voters via `#[Voter]`
 
@@ -95,12 +85,17 @@ final class OwnerVoter implements VoterInterface
 
 `#[Voter]` is repeatable (`Attribute::IS_REPEATABLE`); the request is denied if **any** voter returns `false`.
 
-> **What `$subject` is (and isn't).** The container threads the current PSR-7
-> `ServerRequestInterface` in as `$subject`; Waffle does **not** yet auto-resolve a
-> domain entity for you. An ownership voter therefore reads the identifier off the
-> request (route attribute, query, or body) and loads the resource itself — exactly
-> as `OwnerVoter` does above. Treat the gate as deny-by-default **policy enforcement**:
-> never assume the framework has already fetched or authorized the target object.
+> **What `$subject` is (and isn't).** By default the current PSR-7
+> `ServerRequestInterface` is threaded in as `$subject`, so an ownership voter reads
+> the identifier off the request (route attribute, query, or body) and loads the
+> resource itself — exactly as `OwnerVoter` does above. Alternatively, the application
+> may wire a `Waffle\Commons\Contracts\Security\SubjectResolverInterface` into
+> `SecurityMiddleware` (SEC-05): it runs post-routing / pre-dispatch, turns a route
+> parameter into the hydrated domain object, and that object then reaches every voter
+> as `$subject` — with any resolution failure denied fail-closed (`403`), never
+> silently downgraded. Either way, treat the gate as deny-by-default **policy
+> enforcement**: never assume the framework has already fetched or authorized the
+> target object.
 
 ## 4. Fail-closed default — explicit `#[PublicAccess]` for public endpoints
 
@@ -120,7 +115,7 @@ final class HealthController
 }
 ```
 
-A method-level `#[Voter]` always wins over a class-level `#[PublicAccess]`, so mixed-policy controllers stay safe. See the [`#[PublicAccess]` attribute reference](../reference/attributes-public-access.md) and the [Fail-Closed ABAC explanation](../explanation/security-fail-closed-abac.md).
+`#[PublicAccess]` is **method-only** (`Attribute::TARGET_METHOD`, SEC-05): every public action must carry its own opt-out, so adding a method to a controller never silently inherits an exposure decision. A class-level placement is inert — the `SecureContainer` never reads it, and an action without its own `#[Voter]` or method-level `#[PublicAccess]` still gets a `403`. See the [`#[PublicAccess]` attribute reference](../reference/attributes-public-access.md) and the [Fail-Closed ABAC explanation](../explanation/security-fail-closed-abac.md).
 
 ## 5. CSRF on mutating routes
 
@@ -150,23 +145,29 @@ See the [CSRF explanation page](../explanation/security-csrf-double-submit.md) f
 
 ## 6. How the layers compose
 
-Canonical Beta-1 middleware order (already wired by the skeleton's `AppKernelFactory`):
+Canonical middleware order (already wired by the skeleton's `AppKernelFactory` — the security spine is unchanged since Beta-1; Beta-5 adds the telemetry and transaction slots):
 
 ```
-ErrorHandler → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → SecureHeaders → Dispatcher
+ErrorHandler → Metrics → Tracing → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → TransactionIsolation → SecureHeaders → Dispatcher
 ```
 
-`SecurityMiddleware` then delegates to `SecureContainer::analyze($request, $controller, $method)`:
+`SecurityMiddleware` reads `_classname` + `_method` from the request attributes (set by `CoreRoutingMiddleware`), runs the optional `SubjectResolverInterface` (SEC-05 — a resolution failure denies fail-closed), then delegates to `SecureContainer::analyze($controller, $method, $request, $resolvedSubject)`:
 
-1. Reads `_classname` + `_method` from the request attributes (set by `CoreRoutingMiddleware`).
-2. Collects `#[Voter]` attributes from the method **and** its declaring class.
-3. **Fail-closed:** if the voter list is empty AND no `#[PublicAccess]` is attached → `SecurityException(403)`.
-4. Otherwise resolves each voter from the PSR-11 container and runs `VoterInterface::decide($ctx, $request)` — any `false` → `SecurityException(403)`.
-5. Any failure → `SecurityExceptionInterface` → RFC 7807 `403` via the error handler.
+1. Collects `#[Voter]` attributes from the method **and** its declaring class.
+2. **Fail-closed:** if the voter list is empty AND no method-level `#[PublicAccess]` is attached → `SecurityException(403)`.
+3. Otherwise resolves each voter from the PSR-11 container and runs `VoterInterface::decide($ctx, $subject)` — the resolved subject when a resolver is wired, else the PSR-7 request; any `false` → `SecurityException(403)`.
+4. Any failure → `SecurityExceptionInterface` → RFC 7807 `403` via the error handler.
 
 `CsrfMiddleware` runs the CSRF check on actions tagged `#[RequiresCsrfToken]`, using the SID published by `AnonymousSessionMiddleware`.
 
-`SecureContainer` also wraps the PSR-11 container and applies `Security::analyze()` before every `get()` — preventing low-privilege code from pulling sensitive services.
+`SecureContainer` also wraps the PSR-11 container and applies `Security::analyze()` before every `get()` — preventing low-privilege code from pulling sensitive services. Even a service retrieved manually from the container has passed the audit by the time it reaches your constructor:
+
+```php
+public function __construct(private UserService $service)
+{
+    // If we are here, $service has been analyzed and approved.
+}
+```
 
 ## 7. Handling file uploads safely (SEC-05)
 
@@ -187,3 +188,5 @@ $uploadedFile->moveTo($target);
 ```
 
 `Assert::safePath()` rejects any traversal segment; `Assert::within($base, $path)` additionally guarantees the resolved target stays inside `$base`. See the [Utils reference](../reference/utils.md).
+
+Since the Beta6 audit, `UploadedFile` also takes an optional `baseDir` sixth constructor parameter: when set, `moveTo()` itself enforces `Assert::within($baseDir, $targetPath)` on every destination — configure it wherever you construct upload objects with a known storage root, so containment holds even if a call site forgets the manual check.

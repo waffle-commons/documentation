@@ -1,6 +1,6 @@
 # Security Reference (`waffle-commons/security`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; SEC-01 CSRF subject-binding + `WAFFLE_SID` rotation · SEC-04 fail-closed CORS
 
 Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plus a fully stateless CSRF protection layer (signed double-submit with per-browser binding) and a container decorator (`SecureContainer`) that hardens service retrieval. Enforcement is wired through PSR-15 middleware that sits after routing in the pipeline.
 
@@ -67,12 +67,21 @@ waffle:
 
 ### `Waffle\Commons\Security\Middleware\SecurityMiddleware`
 
+```php
+public function __construct(
+    SecureContainer $secureContainer,
+    ?LoggerInterface $logger = null,                       // null → NullLogger
+    ?SubjectResolverInterface $subjectResolver = null,     // SEC-05: optional domain-subject hydration
+);
+```
+
 PSR-15 middleware that:
 
 1. Reads `_classname` and `_method` from the request attributes (set by `CoreRoutingMiddleware`).
-2. Calls `SecureContainer::analyze($controller, $method, $request)` — the fail-closed, context-aware `#[Voter]` (Layer-2) authorization path. Each voter is resolved from the PSR-11 container and asked `decide(SecurityContextInterface $ctx, mixed $subject = null): bool`, so it sees the authenticated identity and the request; with no voter **and** no `#[PublicAccess]`, the request is denied. (Object-integrity — the `Level1Rule`…`Level10Rule` ladder via `Security::analyze()` — is the separate Layer-1 check that runs at container resolution; see [The Two Authorization Layers](../explanation/security-two-layer-authorization.md).)
-3. Lets the request pass on success; raises `SecurityExceptionInterface` on failure (rendered as `403` by the error handler).
-4. Logs access denials via the injected PSR-3 logger.
+2. When a `Waffle\Commons\Contracts\Security\SubjectResolverInterface` is injected, calls `resolve($request): mixed` to hydrate the domain subject under decision (e.g. the entity a route's `{id}` identifies) — **fail-closed**: a throwing resolver becomes a logged `403` denial, never a silent `null` fallback.
+3. Calls `SecureContainer::analyze($controller, $method, $request, $resolvedSubject)` — the fail-closed, context-aware `#[Voter]` (Layer-2) authorization path. Each voter is resolved from the PSR-11 container and asked `decide(SecurityContextInterface $ctx, mixed $subject = null): bool`; the resolved subject takes precedence over the request as `$subject`, so voters can express true object-level (IDOR) rules; with no voter **and** no `#[PublicAccess]`, the request is denied. (Object-integrity — the `Level1Rule`…`Level10Rule` ladder via `Security::analyze()` — is the separate Layer-1 check that runs at container resolution; see [The Two Authorization Layers](../explanation/security-two-layer-authorization.md).)
+4. Lets the request pass on success; raises `SecurityExceptionInterface` on failure (rendered as `403` by the error handler).
+5. Logs access denials via the injected PSR-3 logger.
 
 ### `Waffle\Commons\Security\Middleware\AnonymousSessionMiddleware`
 
@@ -136,24 +145,13 @@ new CorsMiddleware(
 
 All security attributes live in `Waffle\Commons\Contracts\Security\*` (the contracts package — implementations don't redeclare them):
 
-### `Waffle\Commons\Contracts\Security\Attribute\Rule`
+### `Waffle\Commons\Contracts\Security\Attribute\PublicAccess`
 
-Declares the security level required by a controller method or class. The kernel's effective level must be `>=` the declared level for execution to proceed:
-
-```php
-use Waffle\Commons\Contracts\Security\Attribute\Rule;
-use Waffle\Commons\Contracts\Constant\Constant;
-
-final class AdminController
-{
-    #[Rule(level: Constant::SECURITY_LEVEL10)]
-    public function dangerous(): Response { /* … */ }
-}
-```
+Marks a controller **method** as intentionally publicly accessible (`Attribute::TARGET_METHOD` — method-only, SEC-05: a class-level placement is inert). It is the explicit opt-out from the fail-closed ABAC default: an action with no `#[Voter]` and no method-level `#[PublicAccess]` is denied `403`. Full specification: [`#[PublicAccess]` reference](attributes-public-access.md).
 
 ### `Waffle\Commons\Contracts\Security\Attribute\Voter`
 
-Marks a class as an ABAC voter. The class must implement `VoterInterface`.
+Declares a required voter on a controller class or method; `$name` is the FQCN of a class implementing `VoterInterface`.
 
 ```php
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]

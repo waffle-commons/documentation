@@ -1,6 +1,6 @@
 # Error Handler Reference (`waffle-commons/error-handler`)
 
-> **Release:** `0.1.0-beta5`
+> **Release:** `0.1.0-beta6`
 > **PSR Compliance:** PSR-15 (`MiddlewareInterface`), produces RFC 7807 ("Problem Details for HTTP APIs") responses.
 
 RFC 7807 JSON error rendering plus the PSR-15 middleware that ties exceptions to it. The outermost layer of the canonical pipeline — it catches every `Throwable` thrown downstream and converts it into a structured, security-aware response.
@@ -50,7 +50,7 @@ new JsonErrorRenderer(
 - `Content-Type: application/problem+json` per RFC 7807.
 - For a `MethodNotAllowedExceptionInterface`, an RFC 7231 `Allow` header is added listing the allowed methods (e.g. `Allow: GET, HEAD, OPTIONS, POST`); it is omitted only when the list is empty.
 - `field` is added only when the exception implements `ValidationExceptionInterface` and returns a non-null `getField()`.
-- In production (`$debug === false`), responses with status ≥ 500 have their `detail` replaced by `"An internal server error occurred."` to avoid leaking internals.
+- In production (`$debug === false`), `detail` is **masked to the status title for every exception** (LEAK-03) except an allow-list of client-safe types — `ValidationExceptionInterface`, `RouteNotFoundExceptionInterface`, `MethodNotAllowedExceptionInterface` — whose real message is always surfaced. A `403 SecurityException` therefore never leaks the controller FQCN/method in production (the `detail` in the example above appears only in debug).
 - In debug, the body additionally carries `trace` (array of frames), `file`, `line`.
 
 ## `ErrorHandlerMiddleware`
@@ -62,7 +62,7 @@ final readonly class ErrorHandlerMiddleware implements MiddlewareInterface
 {
     public function __construct(
         private ErrorRendererInterface $renderer,
-        private LoggerInterface        $logger,
+        ?LoggerInterface $logger = null, // null → NullLogger
     );
 }
 ```
@@ -70,7 +70,7 @@ final readonly class ErrorHandlerMiddleware implements MiddlewareInterface
 Behaviour:
 
 1. Calls `$handler->handle($request)`.
-2. On `Throwable`, logs (at level matching the resolved status — 5xx as `error`, 4xx as `warning`) and returns `$renderer->render($e, $request)`.
+2. On `Throwable`, logs at `critical` — with the exception class, full trace, file/line, and request method + URI in the context (OBS-02: the trace is logged only, never serialised into the client response) — and returns `$renderer->render($e, $request)`.
 3. Returns the downstream response untouched on success.
 
 The middleware is **prepended** to the stack so it wraps everything. See the [pipeline reference](pipeline.md) for the canonical Beta-1 ordering.
@@ -86,15 +86,10 @@ The middleware is **prepended** to the stack so it wraps everything. See the [pi
 | `403` | Forbidden |
 | `404` | Not Found |
 | `405` | Method Not Allowed |
-| `409` | Conflict |
-| `415` | Unsupported Media Type |
 | `422` | Unprocessable Entity |
-| `429` | Too Many Requests |
 | `500` | Internal Server Error |
-| `502` | Bad Gateway |
-| `503` | Service Unavailable |
 
-Any unmapped status falls through to a generic `'Error'`.
+Any unmapped status falls through to a generic `'Unknown Error'`.
 
 ## Worker-mode safety
 

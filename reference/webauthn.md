@@ -1,6 +1,6 @@
 # WebAuthn / Passkeys Reference (`waffle-commons/auth`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the WebAuthn / passkey surface (AUTH-01 / AXE6) under RFC-021.*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Adds the WebAuthn / passkey surface (AUTH-01 / AXE6) under RFC-021.*
 > **Requires:** PHP 8.5+, `ext-openssl`, `web-auth/webauthn-lib ^5.3`, `symfony/serializer ^8.1`, `symfony/uid ^8.1`. Depends only on `waffle-commons/contracts`.
 
 The WebAuthn surface is the passkey scheme of the Universal Authentication Bridge. The cryptographic core sits behind a single contract (`Waffle\Commons\Contracts\Auth\WebAuthn\WebAuthnVerifierInterface`) and one concrete adapter (`Waffle\Commons\Auth\WebAuthn\WebAuthnLibAdapter`) — the **only** class that imports `web-auth/webauthn-lib`. Everything else (the ceremony service, the inbound authenticator, the option/credential DTOs) speaks the contract. The component is stateless across FrankenPHP worker requests; the only stateful pieces — the challenge store and the credential repository — are interfaces the integrating app provides.
@@ -176,4 +176,4 @@ All sit under the bridge's exception tree, so a `catch (AuthExceptionInterface)`
 
 The adapter, ceremony service, inbound authenticator, option DTOs, value objects, and codecs are stateless / immutable — the WebAuthn surface adds zero per-request worker state. The only stateful collaborators are the app-provided `CredentialRepositoryInterface` and `WebAuthnChallengeStoreInterface`, which live in application storage, never in the worker. The component passes the `igor-php` worker-mode audit with zero findings.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

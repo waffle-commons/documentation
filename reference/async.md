@@ -1,6 +1,6 @@
 # Async Reference (`waffle-commons/async`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Fiber-based finish-request deferral (ASYNC-01, RFC-015)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Fiber-based finish-request deferral (ASYNC-01, RFC-015)*
 > **Requires:** PHP 8.5+, `psr/log`. Depends only on `waffle-commons/contracts`.
 > **Companion:** the concurrent HTTP fan-out (ASYNC-02) ships in `waffle-commons/http-client` — see the [HTTP Client reference](http-client.md); both halves are summarised here because they share the RFC-015 async surface.
 
@@ -161,4 +161,4 @@ public function placeOrder(TaskRunnerInterface $runner): ResponseInterface
 
 For the integrator's recipe (wiring, the budget, when to reach for a real queue, and the fan-out variant) see [How to: Defer Post-Response Work](../how-to/defer-post-response-work.md).
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

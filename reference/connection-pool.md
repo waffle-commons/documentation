@@ -1,6 +1,6 @@
 # Connection Pool Reference (`waffle-commons/data`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Memory-resident DB pooling — DBAL-01/DBAL-02 (AXE4), an RFC-022 extension*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Memory-resident DB pooling — DBAL-01/DBAL-02 (AXE4), an RFC-022 extension*
 > **Requires:** PHP 8.5+, `ext-pdo`. The Redis pool additionally suggests `ext-redis` (injected, never hard-required). Depends only on `waffle-commons/contracts`.
 
 The authoritative API listing for memory-resident connection pooling: the backend-neutral pool contracts, the two shipped pools (`PDOConnectionPool`, `RedisConnectionPool`), the lease handles they dispense, and the failsafe `TransactionIsolationMiddleware`. For the design reasoning (heal-on-lease, reset-rolls-back, connection affinity) see [Explanation: Memory-Resident Connection Pooling](../explanation/connection-pooling.md); the pool also appears in the broader [data reference](data.md).
@@ -161,4 +161,4 @@ $stack->add(new TransactionIsolationMiddleware($pool));
 
 ***
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -65,4 +65,4 @@ This is genuine concurrency because libcurl waits on all the sockets at once —
 
 ASYNC-01 (sequential, on-worker, post-response) and ASYNC-02 (concurrent, outbound, in-request) solve different problems and ship in different components — `waffle-commons/async` and `waffle-commons/http-client` respectively — joined only through contracts (`Contracts\Async\*`, `Contracts\HttpClient\*`). Neither is a substitute for a message queue: deferral is for short work you want *off* the response path, fan-out is for I/O you want resolved *together*. When you need durability, retries, or work that outlives the request, that is the queue's job, not theirs.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

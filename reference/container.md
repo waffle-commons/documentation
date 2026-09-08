@@ -1,6 +1,6 @@
 # Container Reference (`waffle-commons/container`)
 
-> **Release:** `0.1.0-beta5` &nbsp;|&nbsp; *Adds the dev-only state-reset compliance scanner (DIAG-02)*
+> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Adds the dev-only state-reset compliance scanner (DIAG-02)*
 > **PSR Compliance:** PSR-11 (`Psr\Container\ContainerInterface`)
 
 A strict PSR-11 container with reflection-based autowiring, circular-dependency detection, and worker-mode reset semantics. Core services (the PSR-11 `ContainerInterface` itself) cannot be redefined after registration.
@@ -15,9 +15,14 @@ final class Container implements ContainerInterface
     /**
      * @param array<string, string|Closure|object|callable> $definitions
      */
-    public function __construct(array $definitions = []);
+    public function __construct(
+        array $definitions = [],
+        bool $strictComplianceScan = false,   // DIAG-02: dev-only state-reset scanner
+    );
 }
 ```
+
+`$strictComplianceScan = true` enables the dev-only `Waffle\Commons\Container\Compliance\ComplianceScanner` (DIAG-02): a boot-time scan of the resolved instances, run when the container is locked, that flags worker-unsafe residual state. Leave it `false` in production.
 
 A definition value can be:
 

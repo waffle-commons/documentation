@@ -179,4 +179,4 @@ $cache = new MeteredCache($innerCache, $metricsRegistry);
 
 See the [telemetry reference](../reference/telemetry.md) and the [telemetry-otel reference](../reference/telemetry-otel.md) for the full API surface.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

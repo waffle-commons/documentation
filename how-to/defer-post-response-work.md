@@ -1,5 +1,12 @@
 # How to Defer Post-Response Work
 
+
+> **Access control is fail-closed.** The examples below show routing concerns only.
+> Waffle denies any action that carries no `#[Voter]` with a `403`, so each of them
+> additionally needs either a `#[Voter]` or an explicit `#[PublicAccess]` opt-out to
+> be reachable — see [Secure a controller](secure-a-controller.md).
+
+
 Some work in a handler does not change the response: a confirmation mail, an audit row, a webhook fan-out. Waffle's `waffle-commons/async` component (ASYNC-01, RFC-015) lets you run that work **after the response has been flushed to the client but before the worker accepts its next request**, so the user never waits for it. Each task runs in its own isolated `Fiber`, under a bounded per-request budget.
 
 > **This is finish-request deferral, not a background queue.** Tasks run sequentially on the same single worker thread — a `Fiber` is a cooperative isolation boundary, not a background thread. Keep deferred tasks *short*. For durable, retryable, or long-running work, use a real queue (the budget below is the tripwire that tells you when you have crossed that line).
@@ -155,4 +162,4 @@ For a single non-blocking request, `$client->promise($request)` returns a `Promi
 
 See the [async reference](../reference/async.md) for the full API and the [explanation](../explanation/async-finish-request-deferral.md) for why a Fiber is an isolation boundary and not a thread pool.
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

@@ -13,7 +13,7 @@ The pool is built from the same `waffle.database.*` block used by migrations (se
 ```yaml
 waffle:
   database:
-    driver: 'pgsql'                 # pgsql (default) | mysql/mariadb | sqlite | sqlsrv | oci
+    driver: 'pgsql'                 # pgsql | mysql/mariadb (fallback when unset) | sqlite | sqlsrv | oci
     host: '%env(DB_HOST)%'
     port: '%env(DB_PORT)%'
     database: '%env(DB_NAME)%'
@@ -145,4 +145,4 @@ See the [Connection Pool reference](../reference/connection-pool.md) for the ful
 
 ***
 
-> *Verified for Waffle Framework 0.1.0-beta5 running on PHP 8.5.5+.*
+> *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*
