@@ -2,7 +2,7 @@
 
 > **Release:** `0.1.0-beta6` &nbsp;|&nbsp; *Adds the dev-only orphaned-connection tracer (DIAG-03)*
 
-The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution under the classic PHP SAPI when `frankenphp_handle_request()` is unavailable.
+The application runner. `WaffleRuntime` owns the request loop under FrankenPHP worker mode and falls back to a single-shot execution outside it — under another SAPI, or FrankenPHP in classic mode.
 
 ## `WaffleRuntime` — exact signature
 
@@ -32,14 +32,15 @@ The runtime contains **no concrete framework dependencies at all** — it depend
 ## `loop()` semantics
 
 1. **Boot once** — `$kernel->boot()->configure()` runs exactly once when the FrankenPHP worker starts.
-2. **Iterate** — up to `$maxRequests` times:
-   - Under FrankenPHP: calls `frankenphp_handle_request($handler)` where `$handler`:
-     - rebuilds a PSR-7 `ServerRequestInterface` from the (FrankenPHP-repopulated) superglobals via the injected `GlobalsFactoryInterface::createFromGlobals()`,
-     - calls `$kernel->handle($request)`,
-     - emits the response via the injected `ResponseEmitterInterface::emit()`.
-   - Under classic SAPI: invokes `$handler` once and exits the loop.
+2. **Iterate** — in worker mode, up to `$maxRequests` times, calls `frankenphp_handle_request($handler)` where `$handler`:
+   - rebuilds a PSR-7 `ServerRequestInterface` from the (FrankenPHP-repopulated) superglobals via the injected `GlobalsFactoryInterface::createFromGlobals()`,
+   - calls `$kernel->handle($request)`,
+   - emits the response via the injected `ResponseEmitterInterface::emit()`,
+   - runs `terminate()` when the kernel implements `TerminableInterface`.
+
+   Outside worker mode (another SAPI, or FrankenPHP classic mode) it invokes `$handler` once and returns — see [Worker-mode detection](#worker-mode-detection).
 3. **GC** — every 50 requests, `gc_collect_cycles()` is called to keep long-running worker memory bounded.
-4. **Reset on exit** — when the loop exits (max reached or FrankenPHP signaled stop), `$kernel->reset()` clears request-scoped state.
+4. **Reset after every request** — the handler's `finally` calls `$kernel->reset()` and closes the request and response bodies, even when the request throws. Nothing request-scoped is deferred to worker shutdown (ΔM = 0).
 
 ## Standard `public/index.php`
 
@@ -65,20 +66,18 @@ $kernel = AppKernelFactory::create(
 (new WaffleRuntime(new GlobalsFactory(), new ResponseEmitter()))->loop($kernel, maxRequests: 500);
 ```
 
-## FrankenPHP / classic SAPI auto-detection
+## Worker-mode detection
 
-```php
-$running = function_exists('frankenphp_handle_request')
-    ? frankenphp_handle_request($handler)
-    : false;
+| Situation | What the runtime sees | Behaviour |
+| :--- | :--- | :--- |
+| Not FrankenPHP (CLI, tests) | `frankenphp_handle_request()` is undefined | the handler runs once |
+| FrankenPHP worker, versions that export the flag (1.12.7) | `FRANKENPHP_WORKER=1` in the process environment (`getenv()`) | worker loop |
+| FrankenPHP worker, versions that do not (measured: 1.12.2) | no flag | the first `frankenphp_handle_request()` call serves a request, which confirms worker mode; the loop carries on |
+| FrankenPHP classic mode | no flag | the first call throws a `RuntimeException` ("called while not in worker mode") **before** touching the handler; the runtime then serves the current request once |
 
-if (!function_exists('frankenphp_handle_request')) {
-    $handler();
-    break;
-}
-```
+Without the flag, FrankenPHP itself settles the mode, so no superglobal is read to decide it. A `RuntimeException` thrown by the handler during that first call propagates instead of being mistaken for classic mode, and a `false` from the first call is a worker shutdown: nothing is served.
 
-The runtime intentionally uses **unqualified** `function_exists` and `frankenphp_handle_request` calls so namespace-level test shims can override them via `php-mock-phpunit`. The relevant test (`tests/src/WaffleRuntimeWorkerModeTest.php`) is listed in `mago.toml [guard].excludes` for that reason.
+The runtime intentionally uses **unqualified** `function_exists`, `getenv` and `frankenphp_handle_request` calls so namespace-level test shims can override them. The relevant test (`tests/src/WaffleRuntimeWorkerModeTest.php`) is listed in `mago.toml [guard].excludes` for that reason.
 
 ## Worker-mode safety contract
 
