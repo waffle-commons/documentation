@@ -24,6 +24,8 @@ namespace Waffle\Commons\Contracts\Core;
 
 interface KernelInterface
 {
+    public ContainerInterface $container { get; }
+
     public function boot(): static;
     public function configure(): void;
     public function handle(ServerRequestInterface $request): ResponseInterface;
@@ -32,6 +34,8 @@ interface KernelInterface
 ```
 
 `reset()` is called between FrankenPHP worker requests to clear request-scoped state without re-booting.
+
+*`$container` added in `0.1.0-beta7` (CARRY-04).* It is an interface property (PHP 8.4+): `{ get; }` requires every kernel to expose a publicly readable `$container`, and `waffle`'s `AbstractKernel` satisfies it with its promoted `public protected(set) ContainerInterface $container`. A test bridge such as `waffle-commons/testing` reads it to swap in test doubles between `boot()` and `configure()`, before the container locks. Application code keeps receiving its dependencies through constructors.
 
 ### `Waffle\Commons\Contracts\Core\TerminableInterface`
 
