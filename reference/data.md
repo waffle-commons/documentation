@@ -348,26 +348,72 @@ Either layer failing yields a `Waffle\Commons\Contracts\Exception\Validation\Val
 
 ## Migration runner — `Waffle\Commons\Data\Migration\MigrationRunner`
 
-`final` implementation of `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
+`final` implementation of `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`. *`rollback()`, `status()`, the down scripts, the per-dialect ledger and the `$dialect` argument were added in `0.1.0-beta7` (OPS-03).*
 
 ```php
-public function __construct(RelationalConnectionPoolInterface $pool, ConfigInterface $config);
-
 /**
- * @param (Closure(string): void)|null $onApplied  per-version progress callback
- * @return list<string>                             versions applied this run ([] when up to date)
- * @throws DatabaseExceptionInterface
+ * @param SQLDialect|null $dialect The ledger dialect; null reads it from the
+ *        leased connection's PDO driver name.
  */
+public function __construct(
+    private readonly RelationalConnectionPoolInterface $pool,
+    private readonly ConfigInterface $config,
+    private readonly ?SQLDialect $dialect = null,
+) {}
+
+/** @return list<string> versions applied during this call ([] when up to date) */
 public function run(?Closure $onApplied = null): array;
+
+/** @return list<string> versions reverted during this call, highest first ([] when nothing is applied) */
+public function rollback(int $steps = 1, ?Closure $onReverted = null): array;
+
+/** @return list<MigrationState> every version on disk or in the log, in version order */
+public function status(): array;
 ```
 
-- Borrows one connection from the pool, provisions `waffle_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)` if absent, then applies every `*.sql` file under the configured directory (`waffle.database.migrations_path`) **in lexicographic version order** whose version (the filename without `.sql`) is not yet recorded.
-- Each migration runs in **its own transaction**: on failure the transaction is rolled back, the run aborts, and a `DatabaseException` carrying the offending version is thrown. Already-applied migrations are skipped, so a re-run is a no-op.
+The three methods throw `DatabaseExceptionInterface` when the log cannot be read or a script fails; `rollback()` throws `\InvalidArgumentException` when `$steps` is below 1.
+
+- **Versions.** A version `V` is the file `V.sql` under the configured directory (`waffle.database.migrations_path`, default `migrations`); `V.down.sql`, when present, is its down script and is never applied as a version of its own. Versions are applied **in lexicographic order** and reverted in the reverse order.
+- **`run()`** borrows one connection from the pool, provisions the ledger if absent, then applies every version not yet recorded. Each script runs in **its own transaction** together with its ledger insert: on failure the transaction is rolled back, the run aborts, and a `DatabaseException` carrying the offending version is thrown. Already-applied versions are skipped, so a re-run is a no-op.
+- **`rollback($steps)`** targets the `$steps` most recent recorded versions and reads every target's down script **before reverting any**: a version without a down script, with an empty one, or whose script is gone from disk stops the call with nothing reverted. Each down script then runs in its own transaction together with the ledger delete.
+- **`status()`** reports each version as a `MigrationState`. It never runs a migration script.
+- **Statement-less scripts are refused.** A script holding only `--` / `/* */` comments, blank lines or semicolons throws `Migration file "…" holds no SQL statement, only comments or blank lines: write it or delete it.` before its transaction opens. PostgreSQL and SQLite would otherwise run it as a no-op and log the version.
 - Discovery and execution happen only on the explicit CLI path — never during an HTTP request (zero-magic registry).
 
-**Engine caveat:** per-migration transactions are fully atomic on engines with transactional DDL (SQLite, PostgreSQL). On MySQL, DDL (`CREATE`/`ALTER TABLE`) triggers an implicit commit, so a failed DDL step cannot be rolled back — keep one schema change per migration file on MySQL.
+The value object and its enum live in `waffle-commons/contracts`:
 
-Surfaced to operators as `bin/waffle db:migrate` (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
+```php
+namespace Waffle\Commons\Contracts\Data\Migration;
+
+final readonly class MigrationState
+{
+    /**
+     * @param string|null $appliedAt The ledger's `applied_at` value as the driver returns it (its text
+     *        format differs between engines); null while the version is pending.
+     */
+    public function __construct(
+        public string $version,
+        public MigrationStatus $status,
+        public bool $reversible,
+        public ?string $appliedAt = null,
+    ) {}
+}
+
+enum MigrationStatus: string // namespace Waffle\Commons\Contracts\Data\Migration\Enum
+{
+    case Applied = 'applied'; // recorded in the ledger, script on disk
+    case Pending = 'pending'; // on disk, not yet recorded: the next run applies it
+    case Missing = 'missing'; // recorded, but its script is no longer on disk
+}
+```
+
+`final readonly class` with promoted `public` properties makes the state immutable once built; the backed enum gives `db:status` its printable value (`$state->status->value`).
+
+**The ledger — `Waffle\Commons\Data\Migration\MigrationLedger`.** `final readonly class` holding the `waffle_migrations` SQL (`public const string TABLE = 'waffle_migrations';`) for one dialect: `CREATE TABLE IF NOT EXISTS … (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)` by default (PostgreSQL, MySQL/MariaDB, SQLite, unknown drivers), an `OBJECT_ID` guard with `NVARCHAR(255)` and `DATETIME2 … DEFAULT SYSUTCDATETIME()` on SQL Server (its `TIMESTAMP` is a row-version), and a PL/SQL block that ignores only ORA-00955 ("name is already used") on Oracle. `MigrationLedger::dialectOf(PDO $connection): ?SQLDialect` maps the PDO driver name: `mysql` → MySQL (MariaDB included), `pgsql`, `sqlite`, `sqlsrv`/`dblib` → SQL Server, `oci` → Oracle, anything else → `null`.
+
+**Engine caveat:** per-migration transactions are fully atomic on engines with transactional DDL (SQLite, PostgreSQL, SQL Server). On MySQL, MariaDB and Oracle, DDL (`CREATE`/`ALTER TABLE`) commits implicitly, so a failed DDL step cannot be rolled back — keep one schema change per migration file there. The runner commits only while a transaction is still open, so an implicit commit is not mistaken for a failure. The round trip is tested live on PostgreSQL, SQLite, MySQL 8.4 and MariaDB 11.4; SQL Server and Oracle by SQL-generation tests.
+
+Surfaced to operators as `bin/waffle db:migrate`, `db:status` and `db:rollback`, with `make:migration` to scaffold a version (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
 
 ## Warmup — `Waffle\Commons\Data\Warmup\QueryWarmer`
 

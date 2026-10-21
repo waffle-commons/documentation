@@ -10,6 +10,16 @@ Released in lockstep with the Waffle Commons umbrella tag.
 > Entries begin at `0.1.0-beta6`, when this changelog was introduced; earlier tags
 > (`0.1.0-alpha5` → `0.1.0-beta5`) exist but were not accompanied by release notes here.
 
+## [Unreleased]
+
+### Changed
+- `how-to/database-migrations.md` covers the whole migration cycle — `make:migration`, `db:migrate`, `db:status`,
+  `db:rollback` — with each command's exit codes, and the transactional-DDL caveat now names MariaDB, Oracle and
+  SQL Server too (OPS-03).
+- `reference/console.md`, `reference/data.md` and `reference/contracts.md` document the migration commands,
+  `MigrationRunner::rollback()` and `status()`, `MigrationLedger`, `MigrationState` and `MigrationStatus` (OPS-03).
+- `reference/contracts.md` shows `KernelInterface::$container` (CARRY-04).
+
 ## [0.1.0-beta6] — 2026-09
 
 **Theme: the documentation is made to describe the code that actually exists (AXE 3).**

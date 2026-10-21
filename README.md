@@ -47,7 +47,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Use Events**](how-to/events.md): PSR-14, `#[AsEventListener]`, lifecycle events.
 - [**Routing**](how-to/routing.md): `#[Route]` and `#[Argument]`.
 - [**Validate & Cleanse Input**](how-to/validate-input.md): `Assert` inside PHP 8.5 property hooks → RFC 7807 422.
-- [**Run Database Migrations**](how-to/database-migrations.md): `waffle.database.*` config + `bin/waffle db:migrate` (RFC-022).
+- [**Run Database Migrations**](how-to/database-migrations.md): `waffle.database.*` config, then `make:migration`, `db:migrate`, `db:status` and `db:rollback` (RFC-022, OPS-03).
 - [**Work on Multiple Components Locally**](how-to/local-development-workflow.md): `wfl link` / `unlink` / `debug` / `bench`.
 
 ### Need API Details?

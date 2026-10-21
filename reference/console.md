@@ -37,16 +37,42 @@ final class ConsoleApplication implements ConsoleApplicationInterface
 | `Waffle\Commons\Console\Command\SecurityAuditCommand` | `security:audit` | Walks every registered route and prints its `#[Voter]` / CSRF coverage; exits non-zero when any route is unguarded. |
 | `Waffle\Commons\Console\Command\SensitiveComparisonAuditCommand` | `security:compare-audit` | *Added in Beta-4 (SEC-03).* Scans source (via `SensitiveComparisonScanner`, a `token_get_all` pass) for naive `===`/`!==` on secret/token/HMAC/signature operands that must use `hash_equals()`; returns a non-zero exit on findings. Also exposed monorepo-wide as `wfl compare-audit`. |
 | `Waffle\Commons\Console\Command\MigrateCommand` | `db:migrate` | Applies pending SQL migrations through `waffle-commons/data`'s `MigrationRunnerInterface`, prints applied versions, then resets the connection pool. See [data.md](data.md) and [How to: Database Migrations](../how-to/database-migrations.md). |
+| `Waffle\Commons\Console\Command\MigrationStatusCommand` | `db:status` | *Added in `0.1.0-beta7` (OPS-03).* Lists every version found on disk or in the migration log — `applied`, `pending` or `missing` — with its application time and whether it has a down script, then a count per status. Never runs a migration script. See [§ Migration commands](#migration-commands). |
+| `Waffle\Commons\Console\Command\MigrationRollbackCommand` | `db:rollback` | *Added in `0.1.0-beta7` (OPS-03).* `db:rollback [--steps=N]` reverts the N most recent versions (1 by default), highest first, through their `.down.sql` scripts; the runner checks every target before it reverts any. See [§ Migration commands](#migration-commands). |
 | `Waffle\Commons\Console\Command\MemoryAuditCommand` | `igor:audit` | Streams the monorepo-wide Igor memory-leak & state-mutation audit (`igor.sh`). Thin command depending only on `Waffle\Commons\Contracts\Runtime\AuditRunnerInterface`; the `proc_open` engine lives in `waffle-commons/runtime`. Distinct from `security:audit` (which audits ABAC/CSRF). See [§ `igor:audit`](#igoraudit) below. |
 | `Waffle\Commons\Console\Command\ContainerCompileCommand` | `container:compile` | *Added in Beta-5 (AOT-01, RFC-019).* Emits the graph-identical, reflection-free compiled container. Documented with the AOT build step in [aot.md](aot.md). |
 | `Waffle\Commons\Console\Command\RouteCompileCommand` | `route:compile` | *Added in Beta-5 (AOT-02, RFC-019).* Serialises the `RouteTrie` into a PHP artifact (hardened `unserialize` with an `allowed_classes` allow-list). See [aot.md](aot.md). |
 | `Waffle\Commons\Console\Command\DataWarmupCommand` | `data:warmup` | *Added in Beta-3.* Invokes every registered `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface`: compiled artifacts (parameterised SQL from SQR trees, routing tables, …) are serialised into PHP cache files and primed into OPcache shared memory, removing compilation and disk I/O from the first live request. Idempotent and strictly CLI-side; applications wire their warmers (e.g. `data`'s `QueryWarmer`) in `bin/waffle`. See [data.md → Warmup](data.md#warmup--wafflecommonsdatawarmupquerywarmer). |
 
-All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand` and `DataWarmupCommand` depend only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`, `DataWarmerInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
+All commands extend `Waffle\Commons\Console\Command\AbstractCommand` which provides shared helpers. `MigrateCommand`, `MigrationStatusCommand`, `MigrationRollbackCommand` and `DataWarmupCommand` depend only on contracts interfaces (`MigrationRunnerInterface` + `ResettableInterface`, `DataWarmerInterface`); the concrete services from `waffle-commons/data` are injected by the application's `bin/waffle`.
+
+## Migration commands
+
+*`db:status`, `db:rollback` and `make:migration` added in `0.1.0-beta7` (OPS-03).* The three `db:` commands share one constructor shape — the runner and the pool, both as contracts — and reset the pool in a `finally` block, so the borrowed connection returns to the idle set whatever the outcome:
+
+```php
+final readonly class MigrationRollbackCommand extends AbstractCommand // MigrateCommand, MigrationStatusCommand alike
+{
+    public function __construct(
+        private MigrationRunnerInterface $runner, // waffle-commons/contracts
+        private ResettableInterface $pool,        // the connection pool, reset on the way out
+    ) {}
+}
+```
+
+`final readonly class` makes every promoted property immutable, so the command holds no state between invocations; each one carries the class-level `#[WorkerSafe(scope: 'cli')]` marker of the one-shot CLI commands.
+
+| Command | Exit `0` | Exit `1` (`FAILURE`) | Exit `64` (`USAGE`) |
+| :--- | :--- | :--- | :--- |
+| `db:migrate` | applied, or already up to date | a migration failed (rolled back, run aborted) | — |
+| `db:status` | listed, including an empty project | the migration log cannot be read | — |
+| `db:rollback [--steps=N]` | reverted, or nothing applied | a targeted version cannot be reverted, or its down script failed | `--steps` is not a whole number of at least 1 |
+
+`make:migration` is a maker (see below); the end-to-end workflow is in [How to: Database Migrations](../how-to/database-migrations.md).
 
 ## Waffle Maker commands (RFC-020)
 
-Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every maker extends `AbstractMakerCommand` (PSR-4 namespace discovery from the nearest `composer.json`, atomic file writes, refuses to overwrite without `--force`/`-f`, `--target=DIR` to override the destination — otherwise `src/<Subfolder>` of the current package). Inputs are hardened: every CLI-derived class name / field name is validated as a PHP identifier (`assertValidIdentifier()` — invalid names throw `\InvalidArgumentException`), and every generated file is linted with `php -l` before it is placed at its final path:
+Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every maker extends `AbstractMakerCommand` (PSR-4 namespace discovery from the nearest `composer.json`, atomic file writes, refuses to overwrite without `--force`/`-f`, `--target=DIR` to override the destination — otherwise `src/<Subfolder>` of the current package). Inputs are hardened: every CLI-derived class name / field name is validated as a PHP identifier (`assertValidIdentifier()` — invalid names throw `\InvalidArgumentException`), and every generated PHP file is linted with `php -l` before it is placed at its final path:
 
 | Command | Generates |
 | :--- | :--- |
@@ -59,6 +85,7 @@ Scaffolding generators under `Waffle\Commons\Console\Maker\Command\…`. Every m
 | `make:command` | A console command class (`--command-name=`). |
 | `make:http-client` | A secure PSR-18 HTTP client wrapper (`--base-uri=`). |
 | `make:event-pair` | A coordinated PSR-14 event (`…Event extends AbstractStoppableEvent`) + `#[AsEventListener]` listener pair. |
+| `make:migration` | *Added in `0.1.0-beta7` (OPS-03).* `make:migration <Name> [--target=<migrations directory>]` writes `Version<YYYYMMDD><NN>_<Name>.sql` and its `.down.sql`, both comments only (the runner refuses a script without a statement, so an unedited file is never logged). The date comes from the injected PSR-20 clock; `NN` is the day's next free number, `01` to `99`. Unlike the other makers it writes into the migrations directory, not `src/`: `public function __construct(private ClockInterface $clock, private string $migrationsPath = 'migrations')`, a relative path resolving against the working directory as the runner resolves it. SQL is not PHP, so it is written through `writeTextFile()` — the same atomic write, without the `php -l` check. |
 
 ## `igor:audit`
 
