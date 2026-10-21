@@ -85,7 +85,12 @@ docker exec -w /waffle-commons/your-app waffle-dev php bin/waffle db:migrate
 
 # or, locally
 php bin/waffle db:migrate
+
+# or, in Kubernetes, as a Job from the release image
+php bin/waffle db:migrate
 ```
+
+The skeleton's production image ships `bin/` and `migrations/`, so a Kubernetes Job (or an init container) runs the migrations from the very image it deploys, before the new pods take traffic.
 
 The command prints each applied version in real time and a summary:
 

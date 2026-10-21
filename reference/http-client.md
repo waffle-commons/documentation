@@ -48,7 +48,7 @@ This blocks SSRF pivots via `file://`, `gopher://`, `dict://`, `ldap://`, `telne
 
 ## SEC-02 — SSRF guard (resolve → validate → pin)
 
-When a `Waffle\Commons\HttpClient\Security\SsrfGuard` is injected, every `sendRequest()` resolves the target host, asserts that **every** resolved IP is publicly routable, and pins the vetted address into the transport via `CURLOPT_RESOLVE` — *before* any socket is opened. A non-public resolution throws `SsrfException` (a PSR-18 `RequestExceptionInterface`), fail-closed.
+When a `Waffle\Commons\HttpClient\Security\SsrfGuard` is injected, every `sendRequest()` resolves the target host, asserts that **every** resolved IP is publicly routable, and pins the vetted address into the transport via `CURLOPT_RESOLVE` — *before* any socket is opened. A non-public resolution throws `SsrfException` (a PSR-18 `RequestExceptionInterface`), fail-closed. A host that does not resolve at all throws `NetworkException` with code `CURLE_COULDNT_RESOLVE_HOST`, as cURL reports it for a host it resolves itself: an outage of the name rather than a refusal, so a retry policy retries it and a circuit breaker counts it. Nothing is sent either way.
 
 ```php
 use Waffle\Commons\HttpClient\Client;
@@ -97,9 +97,9 @@ The client enforces a security baseline that callers cannot lower:
 | Class | Extends | Implements (PSR-18) | Thrown when |
 | :--- | :--- | :--- | :--- |
 | `HttpClientException` | `RuntimeException` | `ClientExceptionInterface` | cURL handle could not be allocated. |
-| `NetworkException` | `HttpClientException` | `NetworkExceptionInterface` | Transport failure: DNS, connect timeout, read timeout, TLS error, peer reset, partial-file, send/recv error. |
+| `NetworkException` | `HttpClientException` | `NetworkExceptionInterface` | Transport failure: DNS (including a host the SSRF guard cannot resolve), connect timeout, read timeout, TLS error, peer reset, partial-file, send/recv error. |
 | `RequestException` | `HttpClientException` | `RequestExceptionInterface` | Protocol-level failure (malformed URL, empty response) or any non-network cURL error. |
-| `SsrfException` | `HttpClientException` | `RequestExceptionInterface` | The SSRF guard refused the target host (missing, unresolvable, or a non-public IP). |
+| `SsrfException` | `HttpClientException` | `RequestExceptionInterface` | The SSRF guard refused the target host (missing, or a non-public IP). |
 
 The client uses libcurl errno → PSR-18 mapping in `Client::mapCurlError()`. The full list of "network" errnos: `CURLE_COULDNT_RESOLVE_PROXY`, `CURLE_COULDNT_RESOLVE_HOST`, `CURLE_COULDNT_CONNECT`, `CURLE_OPERATION_TIMEOUTED`, `CURLE_SSL_CONNECT_ERROR`, `CURLE_GOT_NOTHING`, `CURLE_SEND_ERROR`, `CURLE_RECV_ERROR`, `CURLE_PARTIAL_FILE`.
 

@@ -13,6 +13,9 @@ Released in lockstep with the Waffle Commons umbrella tag.
 ## [Unreleased]
 
 ### Changed
+- `reference/http-client.md`: a host the SSRF guard cannot resolve is a `NetworkException` (cURL code 6), no longer an `SsrfException`.
+- `reference/auth.md`: `Client\AuthenticatedSettlingClient`, the outbound credentials decorator that keeps a batch concurrent.
+- `how-to/database-migrations.md`: migrations run from the skeleton's production image, which now ships `bin/` and `migrations/`.
 - `how-to/database-migrations.md` covers the whole migration cycle — `make:migration`, `db:migrate`, `db:status`,
   `db:rollback` — with each command's exit codes, and the transactional-DDL caveat now names MariaDB, Oracle and
   SQL Server too (OPS-03).
