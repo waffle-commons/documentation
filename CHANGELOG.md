@@ -13,6 +13,12 @@ Released in lockstep with the Waffle Commons umbrella tag.
 ## [Unreleased]
 
 ### Added
+- The pool's ping freshness window (CARRY-01): `reference/connection-pool.md` and `reference/data.md` document
+  `PDOConnectionPool`'s `pingFreshnessMs` and its trade-off, `explanation/connection-pooling.md` explains why only
+  a proof of life (a connection or an answered probe) opens the window, `how-to/configure-connection-pooling.md`
+  gains section 6 (`DB_PING_FRESHNESS_MS`), and `how-to/configuration.md` and `reference/configuration-keys.md`
+  list `waffle.database.ping_freshness_ms`. `reference/data.md` says `ConnectionPoolHealthCheck` now asks the
+  leased connection `isAlive()`.
 - Three how-to guides: `how-to/rate-limit-requests.md` (NET-01), `how-to/make-outbound-calls-resilient.md`
   (NET-02/03) and `how-to/run-on-kubernetes.md` (probes, draining, migrations as a Job — OPS-01/02/03).
 - `reference/configuration-keys.md`: every `waffle.*` key the skeleton declares, with its type, template
@@ -26,6 +32,9 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- `how-to/configure-connection-pooling.md` no longer says `maxConnections` has no `waffle.database.*` key: the
+  skeleton has read `waffle.database.pool_size` (`DB_POOL_SIZE`) since beta6. `explanation/connection-pooling.md`
+  gives the probe's real cost, two round trips under PostgreSQL, and drops a method name the pool never exposed.
 - Findings fixed the same day: `reference/configuration-keys.md` drops `waffle.debug`, `waffle.log.channel` and
   `waffle.log.stream` (removed from the skeleton) and shows `waffle.paths.event_listeners` resolved under
   `APP_ROOT`; `security.md` and the rate-limit how-to show the `waffle_ratelimit_storage_errors_total` metric.

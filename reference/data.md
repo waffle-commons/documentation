@@ -18,6 +18,7 @@ public function __construct(
     int $maxConnections = 8,                        // hard ceiling on simultaneously borrowed connections
     string $pingQuery = 'SELECT 1',                 // liveness probe run before dispensing
     ?ConnectionTrackerInterface $tracker = null,    // DIAG-03 dev-only tracer; null ⇒ zero overhead
+    int $pingFreshnessMs = 0,                       // CARRY-01: no probe within this many ms of a proof of life
 );
 
 public function acquire(): PdoConnectionInterface;           // ping-before-dispense; reconnects transparently
@@ -31,6 +32,7 @@ public function activeCount(): int;
 ```
 
 - **Ping-before-dispense** — every connection is probed with `pingQuery` before it leaves the pool; a dropped socket is discarded and a fresh handle is created via `$factory`, so a stale connection never reaches the caller. The pool forces `PDO::ATTR_ERRMODE => ERRMODE_EXCEPTION` on every connection it creates.
+- **Ping freshness window** — *added in `0.1.0-beta7` (CARRY-01).* With `pingFreshnessMs` above `0`, a connection proven alive (connected, or answered the probe) less than that many milliseconds ago leaves without the probe; when the database drops its connections, such a connection can fail leases for up to the window. `0`, the default, probes every dispense. Details and trade-off in the [Connection Pool reference](connection-pool.md).
 - **`reset()`** is the FrankenPHP worker hook: borrowed handles return to the idle set, any open transaction is rolled back (a request that crashed mid-transaction must not leak a lock into the next), and the per-connection statement cache is cleared. Sockets stay open so the next request reuses warm connections.
 - Internal maps are keyed by `spl_object_id()`, so a connection is tracked by identity and can never be double-pooled.
 - **Engine note:** Oracle has no table-less `SELECT`, so pass `pingQuery: 'SELECT 1 FROM DUAL'` when pooling `oci` connections (the workspace `AppKernelFactory` does this automatically).
@@ -464,9 +466,10 @@ half-open.
 
 ## Readiness probe — `Waffle\Commons\Data\Health\ConnectionPoolHealthCheck`
 
-*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: it leases one connection and
-gives it back. Leasing already pings (heal-on-lease), so the probe never opens a connection of its own; it
-serves the relational pool and the Redis pool alike.
+*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: it leases one connection, asks it
+`isAlive()` and gives it back. A lease inside the pool's ping freshness window (CARRY-01) skips its probe, so
+the check asks the connection itself; it never opens a connection of its own, costs one or two round trips,
+and serves the relational pool and the Redis pool alike.
 
 ```php
 final readonly class ConnectionPoolHealthCheck implements HealthCheckInterface
@@ -479,7 +482,8 @@ final readonly class ConnectionPoolHealthCheck implements HealthCheckInterface
 }
 ```
 
-A pool that cannot lease reports down, with the reason in the private report. See
+A pool that cannot lease, or a connection that fails or throws on `isAlive()`, reports down, with the
+reason in the private report. See
 [pipeline.md](pipeline.md#orchestrator-probes-ops-0102).
 
 ## Warmup — `Waffle\Commons\Data\Warmup\QueryWarmer`

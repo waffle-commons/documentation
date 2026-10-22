@@ -30,10 +30,12 @@ waffle:
     username: '%env(DB_USER)%'
     password: '%env(DB_PASSWORD)%'
     charset: 'utf8'   # ignored by pgsql; used by mysql/oci
+    pool_size: '%env(DB_POOL_SIZE)%'                  # absent or invalid ⇒ 8
+    ping_freshness_ms: '%env(DB_PING_FRESHNESS_MS)%'  # absent or invalid ⇒ 500; 0 probes every lease
     migrations_path: 'migrations'
 ```
 
-`AppKernelFactory::buildConnectionPool($config)` turns this into a `PDOConnectionPool`, building the engine-specific DSN per driver (`buildDsn()`) and an Oracle-aware ping query. In the workspace sandbox `DB_HOST` is the `waffle-postgres` compose service. See [How to: Database Migrations](database-migrations.md) and the [data reference](../reference/data.md).
+`AppKernelFactory::buildConnectionPool($config)` turns this into a `PDOConnectionPool`, building the engine-specific DSN per driver (`buildDsn()`) and an Oracle-aware ping query. `pool_size` caps the borrowed connections and `ping_freshness_ms` (*added in `0.1.0-beta7`, CARRY-01*) lets a connection proven alive within that many milliseconds skip the probe — see [How to: Configure connection pooling](configure-connection-pooling.md#6-optional-tune-the-ping-freshness-window). In the workspace sandbox `DB_HOST` is the `waffle-postgres` compose service. See [How to: Database Migrations](database-migrations.md) and the [data reference](../reference/data.md).
 
 ## Injecting Configuration into a Service
 

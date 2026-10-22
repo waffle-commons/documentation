@@ -130,6 +130,7 @@ See [How to: Run Database Migrations](../how-to/database-migrations.md).
 | `waffle.database.password` | string | `%env(DB_PASSWORD)%` | `''` |
 | `waffle.database.charset` | string | `utf8` | `utf8` (ignored by `pgsql`) |
 | `waffle.database.pool_size` | string | `%env(DB_POOL_SIZE)%` | `8`; an invalid value falls back to it |
+| `waffle.database.ping_freshness_ms` | string | `%env(DB_PING_FRESHNESS_MS)%` | `500`; `0` probes every lease, a negative or invalid value falls back to `500` (*added in `0.1.0-beta7`*, CARRY-01) |
 | `waffle.database.migrations_path` | string | `migrations` | `migrations` (`MigrationRunner::DEFAULT_PATH`) |
 
 ## Related
