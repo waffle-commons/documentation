@@ -227,6 +227,347 @@ Builds a PSR-7 `ServerRequestInterface` from the ambient SAPI/superglobals. `Waf
 
 Extends PSR-17's `ServerRequestFactoryInterface` (`createServerRequest(string $method, $uri)`) — the explicit-arguments request factory, distinct from the from-globals `GlobalsFactoryInterface` above.
 
+### `Waffle\Commons\Contracts\Http\ClientIpResolverInterface`
+
+*Added in `0.1.0-beta7` (NET-01).*
+
+```php
+interface ClientIpResolverInterface
+{
+    /** The client's IP address, or null when the request carries none (a request built outside a server). */
+    public function resolve(ServerRequestInterface $request): ?string;
+}
+```
+
+Behind a proxy `REMOTE_ADDR` is the proxy's address, and `X-Forwarded-For` holds whatever the client wrote
+unless a trusted proxy appended to it. An implementation trusts the forwarded chain only from an explicit
+allow-list of proxies and returns the right-most address that is not one, so a client cannot choose its own
+key. Every IP-bound check goes through it. Implementation: `http`'s `TrustedProxyClientIpResolver`
+([http.md](http.md#client-ip-behind-trusted-proxies-net-01)).
+
+## Rate limiting (NET-01)
+
+*Added in `0.1.0-beta7` (NET-01, RFC-017 §3.1, RFC-024 §5.1).* Implementations: `security`'s `RateLimiter`
+and `RateLimitMiddleware` ([security.md](security.md#rate-limiting-net-01)), `data`'s
+`RedisLimiterStateStorage` ([data.md](data.md#shared-state-for-limiters-and-breakers-net-0103)).
+
+The value objects in this section and the next validate every write with a **property hook**. `TokenBucket`
+and `TimeoutPolicy` are shown in full; elsewhere a hook body written `{ /* ≥ 1 */ }` is elided, and every
+elided hook has the same shape — `if (<outside the bound>) { throw new InvalidArgumentException('…'); }`
+then `$this->property = $value;`.
+
+### `Waffle\Commons\Contracts\RateLimit\RateLimiterInterface`
+
+```php
+interface RateLimiterInterface
+{
+    /**
+     * @param string $key  The bucket's key, e.g. "ip:203.0.113.7" or "login:alice"; never empty.
+     * @param int    $cost Between 1 and the bucket capacity.
+     *
+     * @throws InvalidArgumentException When the key is empty or the cost does not fit the bucket.
+     */
+    public function consume(string $key, int $cost = 1): RateLimitDecision;
+}
+```
+
+A storage outage never surfaces as an exception: the limiter applies its failure mode and says so in the
+decision (`$enforced`).
+
+### `Waffle\Commons\Contracts\RateLimit\LimiterStateStorageInterface`
+
+```php
+interface LimiterStateStorageInterface
+{
+    /**
+     * @throws InvalidArgumentException       When the key is empty or the cost does not fit the bucket.
+     * @throws StateStorageExceptionInterface When the storage is unreachable or refuses the operation.
+     */
+    public function consume(string $key, TokenBucket $bucket, int $cost): RateLimitDecision;
+}
+```
+
+Atomically refills the bucket of `$key` for the time elapsed since its last use, then takes `$cost` tokens
+if it holds that many; a new bucket starts full. Each operation is atomic, and the storage keeps the time
+itself, so concurrent workers — and hosts whose clocks drift — agree on every bucket. An in-memory
+implementation is correct for a single worker only.
+
+### `Waffle\Commons\Contracts\RateLimit\TokenBucket`
+
+```php
+final class TokenBucket
+{
+    /** The longest refill period: one day. */
+    public const int MAX_PERIOD_SECONDS = 86_400;
+
+    public function __construct(
+        public private(set) int $capacity {
+            set(int $value) {
+                if ($value < 1) {
+                    throw new InvalidArgumentException('A token bucket holds at least one token.');
+                }
+                $this->capacity = $value;
+            }
+        },
+        public private(set) int $periodSeconds {
+            set(int $value) {
+                if ($value < 1 || $value > self::MAX_PERIOD_SECONDS) {
+                    throw new InvalidArgumentException('A token bucket refills in 1 to 86400 seconds.');
+                }
+                $this->periodSeconds = $value;
+            }
+        },
+    ) {}
+}
+```
+
+Holds at most `$capacity` tokens and refills completely in `$periodSeconds`: "100 requests a minute" is
+`new TokenBucket(100, 60)`, and the capacity is also the largest burst. The constructor-promoted properties
+combine **asymmetric visibility** (`public private(set)`: readable everywhere, writable only inside the
+class) with **property hooks** (`set(int $value) { … }`) that validate every write, so an invalid bucket
+cannot exist.
+
+### `Waffle\Commons\Contracts\RateLimit\RateLimitDecision`
+
+```php
+final class RateLimitDecision
+{
+    public function __construct(
+        public private(set) bool $allowed,
+        public private(set) int $limit { set(int $value) { /* ≥ 1 */ } },
+        public private(set) int $remaining { set(int $value) { /* ≥ 0 */ } },
+        public private(set) int $resetSeconds { set(int $value) { /* ≥ 0 */ } },
+        public private(set) int $retryAfterSeconds = 0 { set(int $value) { /* ≥ 0 */ } },
+        public private(set) bool $enforced = true,
+    );
+}
+```
+
+What the response headers need: `$limit` → `RateLimit-Limit`, `$remaining` → `RateLimit-Remaining`,
+`$resetSeconds` → `RateLimit-Reset`, `$retryAfterSeconds` → `Retry-After` on a `429`. Each hook throws an
+`InvalidArgumentException` on a value below its bound; the constructor also refuses `$remaining > $limit`,
+and requires a denied decision to carry a `Retry-After` of at least 1 second and an allowed one none.
+`$enforced` is false when the limiter could not reach its storage and applied its failure mode: the counts
+are unknown, so the `RateLimit-*` headers are omitted.
+
+### `Waffle\Commons\Contracts\RateLimit\Exception\StateStorageExceptionInterface`
+
+`interface StateStorageExceptionInterface extends Throwable {}` — the shared state is unavailable. The
+limiter and the breaker catch it to apply their failure mode without coupling to the storage.
+
+## Outbound resilience (NET-02/03)
+
+*Added in `0.1.0-beta7` (NET-02/03, RFC-024).* Implementations: `http-client`'s `Client`,
+`RetryingClient` and `CircuitBreakerClient` ([http-client.md](http-client.md#resilience-net-0203)),
+`data`'s `RedisCircuitStateStorage` ([data.md](data.md#shared-state-for-limiters-and-breakers-net-0103)).
+
+### `Waffle\Commons\Contracts\HttpClient\TimeoutPolicy`
+
+```php
+final class TimeoutPolicy
+{
+    public const int DEFAULT_CONNECT_MS = 1000;
+    public const int DEFAULT_TOTAL_MS = 10_000;
+    public const int MAX_CONNECT_MS = 30_000;
+    public const int MAX_TOTAL_MS = 120_000;
+
+    public function __construct(
+        public private(set) int $connectMs = self::DEFAULT_CONNECT_MS {
+            set(int $value) {
+                if ($value < 1 || $value > self::MAX_CONNECT_MS) {
+                    throw new InvalidArgumentException('A connect timeout lies between 1 and 30000 ms.');
+                }
+                $this->connectMs = $value;
+            }
+        },
+        public private(set) int $totalMs = self::DEFAULT_TOTAL_MS {
+            set(int $value) {
+                if ($value < 1 || $value > self::MAX_TOTAL_MS) {
+                    throw new InvalidArgumentException('A total timeout lies between 1 and 120000 ms.');
+                }
+                $this->totalMs = $value;
+            }
+        },
+    ) {}
+}
+```
+
+No infinite timeout can be built: cURL reads `0` as "no timeout", so the hooks refuse `≤ 0` and anything
+above the ceilings.
+
+### `Waffle\Commons\Contracts\HttpClient\RetryPolicy`
+
+```php
+final class RetryPolicy
+{
+    /** @var list<int> */
+    public const array RETRYABLE_STATUSES = [429, 502, 503, 504];
+
+    public function __construct(
+        public private(set) int $maxAttempts = 3 { set(int $value) { /* 1 to 10 */ } },
+        public private(set) int $baseDelayMs = 100 { set(int $value) { /* ≥ 1 */ } },
+        public private(set) int $maxDelayMs = 2000 { set(int $value) { /* ≥ 1 */ } },
+        public private(set) int $budgetMs = 15_000 { set(int $value) { /* ≥ 1 */ } },
+        public private(set) bool $retryNonIdempotent = false,
+    ) {}
+}
+```
+
+A transport failure or a retryable status is retried with exponential backoff and full jitter, up to
+`$maxAttempts` attempts in all, and no wait starts once `$budgetMs` would be exceeded. Only idempotent
+methods (RFC 9110: `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) are retried unless `$retryNonIdempotent` is
+set. A `Retry-After` may exceed `$maxDelayMs` when it fits the remaining budget (RFC-024 §5.4). Each hook
+throws an `InvalidArgumentException` outside its bounds.
+
+### `Waffle\Commons\Contracts\HttpClient\SettlingClientInterface`
+
+```php
+interface SettlingClientInterface extends ConcurrentClientInterface
+{
+    /**
+     * @param array<array-key, RequestInterface> $requests
+     *
+     * @return array<array-key, ResponseInterface|ClientExceptionInterface> One outcome per request, in the
+     *         batch's key order.
+     */
+    public function settleRequests(array $requests): array;
+}
+```
+
+A concurrent client that settles a whole batch: every request ends with its response or the exception its
+transfer failed with, and none is thrown. The resilience decorators need every outcome — the breaker counts
+each, the retry policy resends only what failed — so a decorator below them implements this to keep a batch
+concurrent (`auth`'s `AuthenticatedSettlingClient`, for one); a client that does not is sent one request at
+a time.
+
+### `Waffle\Commons\Contracts\CircuitBreaker\CircuitBreakerPolicy`
+
+```php
+final class CircuitBreakerPolicy
+{
+    public function __construct(
+        public private(set) int $failureRatePercent = 50 { set(int $value) { /* 1 to 100 */ } },
+        public private(set) int $minimumCalls = 10 { set(int $value) { /* ≥ 1 */ } },
+        public private(set) int $windowSeconds = 60 { set(int $value) { /* 1 to 3600 */ } },
+        public private(set) int $coolDownSeconds = 30 { set(int $value) { /* 1 to 3600 */ } },
+        public private(set) int $halfOpenTrials = 1 { set(int $value) { /* ≥ 1 */ } },
+    ) {}
+}
+```
+
+Closed → open when, within `$windowSeconds`, at least `$minimumCalls` calls were recorded and
+`$failureRatePercent` % or more failed. Open → half-open after `$coolDownSeconds`. Half-open admits
+`$halfOpenTrials` trial calls: a success closes the circuit, a failure opens it again. Each hook throws an
+`InvalidArgumentException` outside its bounds.
+
+### `Waffle\Commons\Contracts\CircuitBreaker\CircuitStateStorageInterface`
+
+```php
+interface CircuitStateStorageInterface
+{
+    /** @throws StateStorageExceptionInterface When the storage is unreachable. */
+    public function acquire(string $circuit, CircuitBreakerPolicy $policy): CircuitDecision;
+
+    /** @throws StateStorageExceptionInterface When the storage is unreachable. */
+    public function record(string $circuit, CircuitBreakerPolicy $policy, bool $success): CircuitDecision;
+}
+```
+
+`acquire()` answers whether a call may go now — always when closed, never while open before the cool-down,
+for at most `$halfOpenTrials` calls when half-open — and turns an open circuit whose cool-down elapsed
+half-open. `record()` reports the outcome and opens or closes the circuit as the policy says. Every
+operation is atomic, in the same storage family as the limiter's.
+
+### `CircuitDecision`, `CircuitState`, `CircuitStateChanged`, `CircuitOpenExceptionInterface`
+
+```php
+final readonly class CircuitDecision
+{
+    public function __construct(
+        public bool $allowed,
+        public CircuitState $state,
+        public ?CircuitState $previous = null,
+    ) {}
+
+    /** True when this operation moved the circuit from `$previous` to `$state`. */
+    public function isTransition(): bool;
+}
+
+enum CircuitState: string
+{
+    case Closed = 'closed';
+    case HalfOpen = 'half_open';
+    case Open = 'open';
+}
+
+final readonly class CircuitStateChanged   // Contracts\CircuitBreaker\Event
+{
+    /** @param string $circuit The upstream origin the circuit protects, e.g. "https://api.example.com:443". */
+    public function __construct(
+        public string $circuit,
+        public CircuitState $from,
+        public CircuitState $to,
+    ) {}
+}
+
+interface CircuitOpenExceptionInterface extends Throwable {}   // Contracts\CircuitBreaker\Exception
+```
+
+`CircuitStateChanged` is dispatched through PSR-14, so listeners in any component react without importing
+the client that owns the breaker. A `CircuitOpenExceptionInterface` means the call failed fast before any
+connection; its code is the HTTP status the error handler renders (`503`), and it is never retried.
+
+## Health checks (OPS-01)
+
+*Added in `0.1.0-beta7` (OPS-01, RFC-023 §3.1).* Runner: `pipeline`'s `ReadinessProbe`
+([pipeline.md](pipeline.md#orchestrator-probes-ops-0102)).
+
+### `Waffle\Commons\Contracts\Health\HealthCheckInterface`
+
+```php
+interface HealthCheckInterface
+{
+    /** Stable identifier, used in the detailed report and in `waffle.health.required`: "db.pool", "redis". */
+    public function name(): string;
+
+    /** Whether a failure of this probe makes the instance not ready. */
+    public function isCritical(): bool;
+
+    /** Probes the dependency within the probe's own timeout. Never throws: a failure is a down result. */
+    public function check(): HealthResult;
+}
+```
+
+Components ship their own probes; the application registers them and declares the required ones by name.
+A probe stays cheap — it leases a pooled connection rather than opening one — because it runs on every
+`/readyz` call.
+
+### `Waffle\Commons\Contracts\Health\HealthResult` and `Enum\HealthStatus`
+
+```php
+final readonly class HealthResult
+{
+    private function __construct(
+        public HealthStatus $status,
+        public string $detail,
+    ) {}
+
+    public static function up(string $detail = ''): self;
+
+    public static function down(string $detail): self;
+}
+
+enum HealthStatus: string
+{
+    case Up = 'up';
+    case Down = 'down';
+}
+```
+
+Binary on purpose (RFC-023 §5.4). `$detail` is meant for the private report only: the public body never
+shows it, because dependency topology is reconnaissance data. The probe runner measures each duration
+itself; a probe does not report it.
+
 ## Security
 
 ### `Waffle\Commons\Contracts\Security\SecurityInterface`

@@ -43,6 +43,32 @@ Beta-3 introduces the **`waffle-commons/data`** component (RFC-022) — a worker
 
 The Beta-3 cycle then completes the RFC-022 surface. In **contracts**: the SQR vocabulary (`Contracts\Data\Enum\{Operator, Direction}` — ⚠️ relocated from `Waffle\Commons\Data\Query` — plus the `QueryInterface` / `ComparisonInterface` / `OrderInterface` property-interfaces), the stateless `Contracts\Data\Repository\RepositoryInterface` (`find` / `findOne` / `stream`), and the CRUD write surface (`WritableRepositoryInterface`: `save` / `delete` / `findById`, through pure `DataMapperInterface` mappers). In **data**: all six relational dialects plus the MongoDB / key-value / Cassandra (CQL) / GraphQL compilers, seven typed repositories, live drivers, and the atomic flat-file JSON store — full type listing in [data.md](data.md), design rationale (ports-and-adapters drivers, the CQL transport situation, the workspace sandbox) in [Explanation: The Universal Data & Persistence Layer](../explanation/data-persistence.md). In **console**: `db:migrate` (concrete `MigrationRunner` wired by the app's `bin/waffle` — contracts-only edge, see [How to: Database Migrations](../how-to/database-migrations.md)), `data:warmup`, and the `make:entity` / `make:repository` makers (RFC-020) — see [console.md](console.md) and the [data CHANGELOG](../../data/CHANGELOG.md).
 
+## Beta-7 additions (in progress) — traffic protection and operability
+
+Beta-7 (`0.1.0-beta7`, in progress) adds the production surface. Documented so far:
+
+- **Rate limiting (NET-01).** Contracts `RateLimit\{RateLimiterInterface, LimiterStateStorageInterface,
+  TokenBucket, RateLimitDecision}` and `Http\ClientIpResolverInterface`; `security`'s
+  `RateLimitMiddleware` and `RateLimiter`; `http`'s `TrustedProxyClientIpResolver`; `data`'s
+  `RedisLimiterStateStorage`. See [contracts.md](contracts.md#rate-limiting-net-01),
+  [security.md](security.md#rate-limiting-net-01) and
+  [How to: Rate-Limit Requests](../how-to/rate-limit-requests.md).
+- **Outbound resilience (NET-02/03).** Contracts `HttpClient\{TimeoutPolicy, RetryPolicy,
+  SettlingClientInterface}` and the `CircuitBreaker\*` family; `http-client`'s `Client::withTimeouts()`,
+  `RetryingClient` and `CircuitBreakerClient`; `data`'s `RedisCircuitStateStorage`. See
+  [http-client.md](http-client.md#resilience-net-0203) and
+  [How to: Make Outbound Calls Resilient](../how-to/make-outbound-calls-resilient.md).
+- **Probes and graceful shutdown (OPS-01/02).** Contracts `Health\{HealthCheckInterface, HealthResult}`;
+  `pipeline`'s `ProbeMiddleware` and `ReadinessProbe`; the `data`, `cache` and `queue` probes. See
+  [pipeline.md](pipeline.md#orchestrator-probes-ops-0102) and
+  [How to: Run on Kubernetes](../how-to/run-on-kubernetes.md).
+- **Configuration keys.** Every `waffle.*` key the skeleton declares, with its reader:
+  [configuration-keys.md](configuration-keys.md).
+
+The migration lifecycle (OPS-03) is in [How to: Run Database Migrations](../how-to/database-migrations.md).
+The four new components (`queue`, `openapi`, `serializer`, `testing`) get their reference pages before the
+beta8 freeze (`[DOC-01]`).
+
 ## Beta-6 additions
 
 Beta-6 is the **stabilisation, audit and measurement** wave — it adds no new components. The contracts

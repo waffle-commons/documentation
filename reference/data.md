@@ -415,6 +415,73 @@ enum MigrationStatus: string // namespace Waffle\Commons\Contracts\Data\Migratio
 
 Surfaced to operators as `bin/waffle db:migrate`, `db:status` and `db:rollback`, with `make:migration` to scaffold a version (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
 
+## Shared state for limiters and breakers (NET-01/03)
+
+*Added in `0.1.0-beta7` (NET-01/03, RFC-024 §5.1).* The Redis implementations of the two state contracts
+of [contracts.md](contracts.md#rate-limiting-net-01), over the framework's phpredis pool
+(`RedisConnectionPoolInterface`): each call leases a connection and gives it back, and each operation is
+**one Lua script** on the Redis server, so concurrent workers never race and agree on the time (the script
+reads `TIME`, not the PHP host's clock). A PSR-16 cache could not do this: `get` then `set` is not atomic.
+The pool must hand out an ext-redis `\Redis` client; any failure surfaces as `StateStorageException`
+(`StateStorageExceptionInterface`), which the limiter and the breaker turn into their failure mode.
+
+### `Waffle\Commons\Data\RateLimit\RedisLimiterStateStorage`
+
+```php
+final readonly class RedisLimiterStateStorage implements LimiterStateStorageInterface
+{
+    public const string DEFAULT_PREFIX = 'waffle:ratelimit:';
+
+    public function __construct(
+        private RedisConnectionPoolInterface $pool,
+        private string $prefix = self::DEFAULT_PREFIX,
+    ) {}
+}
+```
+
+A bucket is a hash (`tokens`, `ts`) under `prefix . key` that expires once it would be full again. A bucket
+seen for the first time starts full.
+
+### `Waffle\Commons\Data\CircuitBreaker\RedisCircuitStateStorage`
+
+```php
+final readonly class RedisCircuitStateStorage implements CircuitStateStorageInterface
+{
+    public const string DEFAULT_PREFIX = 'waffle:circuit:';
+
+    public function __construct(
+        private RedisConnectionPoolInterface $pool,
+        private string $prefix = self::DEFAULT_PREFIX,
+    ) {}
+}
+```
+
+A circuit is a hash under `prefix . circuit` (`waffle:circuit:https://api.example.com:443`): `state`,
+`opened_at`, `trials` and `trial_at` (half-open admissions), and the failure window (`window_start`,
+`calls`, `failures`). It expires once nothing can depend on it any more. A half-open trial that records no
+outcome within a cool-down gives its slot back, so a worker that died mid-call never holds the circuit
+half-open.
+
+## Readiness probe — `Waffle\Commons\Data\Health\ConnectionPoolHealthCheck`
+
+*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: it leases one connection and
+gives it back. Leasing already pings (heal-on-lease), so the probe never opens a connection of its own; it
+serves the relational pool and the Redis pool alike.
+
+```php
+final readonly class ConnectionPoolHealthCheck implements HealthCheckInterface
+{
+    public function __construct(
+        private ConnectionPoolInterface $pool,
+        private string $name = 'db.pool',
+        private bool $critical = true,
+    ) {}
+}
+```
+
+A pool that cannot lease reports down, with the reason in the private report. See
+[pipeline.md](pipeline.md#orchestrator-probes-ops-0102).
+
 ## Warmup — `Waffle\Commons\Data\Warmup\QueryWarmer`
 
 *Added in Beta-3.* Implements `Waffle\Commons\Contracts\Data\Warmup\DataWarmerInterface` — the engine behind `bin/waffle data:warmup` (see [console.md](console.md)):

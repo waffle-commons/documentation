@@ -48,6 +48,9 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Routing**](how-to/routing.md): `#[Route]` and `#[Argument]`.
 - [**Validate & Cleanse Input**](how-to/validate-input.md): `Assert` inside PHP 8.5 property hooks → RFC 7807 422.
 - [**Run Database Migrations**](how-to/database-migrations.md): `waffle.database.*` config, then `make:migration`, `db:migrate`, `db:status` and `db:rollback` (RFC-022, OPS-03).
+- [**Rate-Limit Requests**](how-to/rate-limit-requests.md): a token bucket per subject or client IP, shared in Redis, with `RateLimit-*` headers and `429` (NET-01).
+- [**Make Outbound Calls Resilient**](how-to/make-outbound-calls-resilient.md): timeouts, bounded retries and a per-origin circuit breaker (NET-02/03).
+- [**Run on Kubernetes**](how-to/run-on-kubernetes.md): `/healthz` and `/readyz`, draining before SIGTERM, migrations as a Job (OPS-01/02/03).
 - [**Work on Multiple Components Locally**](how-to/local-development-workflow.md): `wfl link` / `unlink` / `debug` / `bench`.
 
 ### Need API Details?
@@ -56,6 +59,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Routing**](reference/routing.md)
 - [**Data & Persistence**](reference/data.md)
 - [**`wfl` Developer CLI**](reference/wfl.md)
+- [**Configuration Keys**](reference/configuration-keys.md)
 - [**Index of Components**](reference/index.md)
 
 ### Under the Hood

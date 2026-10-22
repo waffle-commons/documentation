@@ -82,6 +82,36 @@ class GlobalsFactory implements GlobalsFactoryInterface
 
 > **Security note.** `GlobalsFactory` does **not** enforce trusted hosts. Host-header anti-poisoning is the job of `Waffle\Commons\Pipeline\Middleware\TrustedHostMiddleware`, which runs between `ErrorHandlerMiddleware` and `CoreRoutingMiddleware`.
 
+## Client IP behind trusted proxies (NET-01)
+
+*Added in `0.1.0-beta7` (NET-01).* `Waffle\Commons\Http\ClientIp\TrustedProxyClientIpResolver` implements
+`Waffle\Commons\Contracts\Http\ClientIpResolverInterface`: the address of the client behind a reverse proxy
+or an ingress. Every IP-bound check — the rate limiter first — goes through it instead of reading
+`REMOTE_ADDR`.
+
+```php
+final readonly class TrustedProxyClientIpResolver implements ClientIpResolverInterface
+{
+    /**
+     * @param list<string> $trustedProxies Proxy addresses or CIDR ranges (`10.0.0.0/8`, `fd00::/8`).
+     *
+     * @throws InvalidArgumentException When an entry is neither an IP address nor a CIDR range.
+     */
+    public function __construct(array $trustedProxies = []);
+
+    #[\Override]
+    public function resolve(ServerRequestInterface $request): ?string;
+}
+```
+
+- `REMOTE_ADDR` not a trusted proxy (or no proxy configured): `REMOTE_ADDR` is the client.
+- `REMOTE_ADDR` a trusted proxy: `X-Forwarded-For` is walked **from the right**; each hop a trusted proxy
+  appended is skipped, and the first address that is not a trusted proxy is the client. A client can
+  prepend anything to the header; it cannot make a trusted proxy append a false hop.
+- A malformed hop stops the walk and `REMOTE_ADDR` is returned rather than a guess. No `REMOTE_ADDR`, or
+  one that is not an IP address: `null`.
+- IPv4 and IPv6 alike; a CIDR range matches only addresses of its own family.
+
 ## `ResponseEmitter` — emitting a PSR-7 Response
 
 ```php

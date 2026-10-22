@@ -12,7 +12,24 @@ Released in lockstep with the Waffle Commons umbrella tag.
 
 ## [Unreleased]
 
+### Added
+- Three how-to guides: `how-to/rate-limit-requests.md` (NET-01), `how-to/make-outbound-calls-resilient.md`
+  (NET-02/03) and `how-to/run-on-kubernetes.md` (probes, draining, migrations as a Job — OPS-01/02/03).
+- `reference/configuration-keys.md`: every `waffle.*` key the skeleton declares, with its type, template
+  value, default and reader. It flags `waffle.debug`, `waffle.log.channel` and `waffle.log.stream` as
+  declared but read by nothing, and the `waffle.paths.event_listeners` default as pointing at a directory
+  the skeleton does not have.
+- Reference sections for the NET/OPS surface: `contracts.md` (rate limiting, outbound resilience, health
+  checks, `ClientIpResolverInterface`), `security.md` (`RateLimitMiddleware`, `RateLimiter`,
+  `StorageFailureMode`), `http.md` (`TrustedProxyClientIpResolver`), `pipeline.md` (`ProbeMiddleware`,
+  `ReadinessProbe`), `data.md` (the Redis state storages, `ConnectionPoolHealthCheck`) and `cache.md`
+  (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
+
 ### Changed
+- `reference/http-client.md`: `Client` implements `SettlingClientInterface` and takes its timeouts from a
+  `TimeoutPolicy` (`withTimeouts()`): they are no longer hardcoded ceilings. New *Resilience* section
+  (`RetryingClient`, `CircuitBreakerClient`, `CircuitObservers`) and `CircuitOpenException` in the exception
+  table.
 - `reference/http-client.md`: a host the SSRF guard cannot resolve is a `NetworkException` (cURL code 6), no longer an `SsrfException`.
 - `reference/auth.md`: `Client\AuthenticatedSettlingClient`, the outbound credentials decorator that keeps a batch concurrent.
 - `how-to/database-migrations.md`: migrations run from the skeleton's production image, which now ships `bin/` and `migrations/`.

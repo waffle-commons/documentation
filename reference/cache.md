@@ -56,6 +56,31 @@ All inherit from `Waffle\Commons\Cache\Exception\CacheException` and implement `
 - `CacheBackendUnavailableException` — implements `CacheBackendUnavailableExceptionInterface`. Raised when an adapter's backing store cannot be reached.
 - `InvalidCacheKeyException` — implements `InvalidCacheKeyExceptionInterface` + PSR-16's `Psr\SimpleCache\InvalidArgumentException`. Raised by `KeyValidator`.
 
+## Readiness probe — `Waffle\Commons\Cache\Health\CacheHealthCheck`
+
+*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: one `has()` on a fixed key
+(`PROBE_KEY = 'waffle.health.probe'`) — a single read round trip, never a write. A Redis-backed cache that
+cannot reach Redis throws, and the probe reports it down.
+
+```php
+final readonly class CacheHealthCheck implements HealthCheckInterface
+{
+    public const string PROBE_KEY = 'waffle.health.probe';
+
+    public function __construct(
+        private CacheInterface $cache,
+        private string $name = 'cache',
+        private bool $critical = false,
+    ) {}
+}
+```
+
+Not critical by default: an application that cannot serve without its cache says so (pass
+`critical: true`, or list `cache` under `waffle.health.required`). The skeleton registers it only when
+`waffle.cache.adapter` is `redis` — an in-memory cache would always answer "up". Give it the raw cache, not
+the `MeteredCache` decorator, or every probe skews the hit ratio. See
+[pipeline.md](pipeline.md#orchestrator-probes-ops-0102).
+
 ## Quick example
 
 ```php
