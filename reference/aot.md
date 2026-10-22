@@ -48,20 +48,20 @@ The emitted class (default FQCN `Waffle\Generated\CompiledContainer`) composes t
 final class CompiledContainer implements \Waffle\Commons\Contracts\Container\CompiledContainerInterface
 {
     private const array INLINED = [ /* id => true membership map */ ];
-    private array $instances = [];                  // worker-lifetime memo of the INLINED singletons ONLY
+    private array $instances = [];                  // fast path over the runtime memo, for the INLINED singletons ONLY
 
     public function __construct(private readonly \Waffle\Commons\Container\Container $runtime) {}
 
-    public function get(string $id): mixed;          // non-INLINED ids delegate to $this->runtime BEFORE the memo check; inlined ids memo a match($id) of literal `new …`
+    public function get(string $id): mixed;          // non-INLINED ids delegate to $this->runtime BEFORE the memo check; inlined ids are built (a match($id) of literal `new …`) through $this->runtime->memoise()
     public function has(string $id): bool;           // → $this->runtime->has($id)
     public function set(string $id, object|callable|string $concrete): void; // → $this->runtime->set(...)
-    public function reset(): void;                   // cascades reset() over the inlined memo, then $this->runtime->reset()
+    public function reset(): void;                   // → $this->runtime->reset(), whose cascade covers the inlined instances too
 }
 ```
 
-The memo holds **only the inlined services** — `get()` guards on the `self::INLINED` membership map and delegates every non-inlined id (closures, pre-built objects, passthroughs) to the runtime container *without* memoising it locally, so a resettable passthrough resets exactly once per request (the runtime memo stays its single owner). `reset()` cascades `reset()` to every memoised service implementing `Waffle\Commons\Contracts\Service\ResettableInterface`, then resets the composed runtime container; it **never evicts** the memo — identity persists for the worker's lifetime, exactly like the runtime container's own `reset()`. When no definition is inlinable the memo is omitted entirely. No new cross-request state is introduced (`igor-php` clean).
+The memo holds **only the inlined services** — `get()` guards on the `self::INLINED` membership map and delegates every non-inlined id (closures, pre-built objects, passthroughs) to the runtime container *without* memoising it locally, so a resettable passthrough resets exactly once per request (the runtime memo stays its single owner). An inlined id is built through the runtime container's `memoise()`, so the runtime memo holds it too, and `reset()` simply delegates: the runtime's cascade resets each service implementing `Waffle\Commons\Contracts\Service\ResettableInterface` exactly once. Nothing ever **evicts** the memo: identity persists for the worker's lifetime, exactly like the runtime container's own `reset()`. When no definition is inlinable the memo is omitted entirely. No new cross-request state is introduced (`igor-php` clean).
 
-Accepted constraint (Beta-6): a closure factory or runtime-autowired passthrough that transitively resolves an inlined id builds its own runtime-side instance — the compiled memo never registers into the composed runtime container, so such an id can exist as one instance per memo. Each copy still resets exactly once per request via its own owner's `reset()` cascade. Graph parity is structural (FQCN-normalised deep-equality), not instance identity.
+One instance per id (since 0.1.0-beta7): because the compiled `get()` memoises an inlined id in the runtime container, a closure factory or runtime-autowired passthrough that resolves the same id gets the same instance, whichever side resolved it first. In Beta-6 such an id existed once per memo, an accepted constraint that is now lifted. The runtime container class must therefore provide `memoise(string $id, Closure $build)` (see [`reference/container`](container.md#beyond-the-interface--memoise)), and the compiler refuses one without it when any definition is inlinable. An artefact compiled before 0.1.0-beta7 keeps the old behaviour until `container:compile` runs again. Graph parity is structural (FQCN-normalised deep-equality).
 
 ## Container compile command — `Waffle\Commons\Console\Command\ContainerCompileCommand`
 
@@ -153,11 +153,11 @@ Default artifact path **`var/cache/routes.trie.php`**, overridable with the posi
 
 ## Exceptions
 
-- `Waffle\Commons\Console\Exception\CompilerException` — raised by `ContainerCompiler::compile()` when the container exposes no inspectable `definitions` map (or the property is not an array).
+- `Waffle\Commons\Console\Exception\CompilerException` — raised by `ContainerCompiler::compile()` when the container exposes no inspectable `definitions` map (or the property is not an array), or when a definition is inlinable and the runtime container class has no `memoise()` method or cannot be loaded.
 
 ## Worker-safety contract
 
-The compiled container introduces no cross-request state beyond its per-request memo (reset every request, like the runtime container's instance cache); the route trie is immutable once built. Both AOT paths are off by default — only `WAFFLE_AOT=1` consults the compiled container, and the trie is consulted only when present in cache or built at boot. The `igor-php` worker-mode audit passes with zero findings.
+The compiled container introduces no cross-request state beyond its memo of the inlined singletons, a fast path over the runtime container's instance cache that lives as long as the worker, like that cache; the runtime's `reset()` scrubs those instances every request. The route trie is immutable once built. Both AOT paths are off by default — only `WAFFLE_AOT=1` consults the compiled container, and the trie is consulted only when present in cache or built at boot. The `igor-php` worker-mode audit passes with zero findings.
 
 ## Quick example
 

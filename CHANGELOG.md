@@ -45,6 +45,10 @@ Released in lockstep with the Waffle Commons umbrella tag.
 - `reference/contracts.md`, `routing.md` and `pipeline.md` name `Constant::ATTR_PARAMS` for the `_params`
   attribute. `reference/core.md` now says `ControllerDispatcher` reads `_classname`, `_method` and `_params`: it
   said `_controller` and `_route_params`, which the code never read (CARRY-06).
+- `reference/container.md` documents `Container::memoise()`. `reference/aot.md` shows the compiled container
+  building its inlined services through it: every path now shares one instance, `reset()` only delegates, and
+  the Beta-6 "one instance per memo" constraint is gone. Its worker-safety paragraph no longer calls the memo
+  per-request: it lives as long as the worker (CARRY-06).
 
 ## [0.1.0-beta6] — 2026-09
 
