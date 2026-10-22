@@ -86,7 +86,7 @@ The client enforces a security baseline that callers cannot lower:
 | `CURLOPT_NOSIGNAL` | `true` | Required for resident-worker safety. |
 | `CURLOPT_BUFFERSIZE` | `8_192` | Chunk size for response streaming via `CURLOPT_WRITEFUNCTION`. |
 | `CURLOPT_UPLOAD` + `CURLOPT_READFUNCTION` | set when a body is present | Streams the request body in `CHUNK_SIZE` chunks instead of buffering it with `CURLOPT_POSTFIELDS`. |
-| `CURLOPT_INFILESIZE` | body length, when known | Advertises `Content-Length`; omitted for unknown-length streams (→ `Transfer-Encoding: chunked`). |
+| `CURLOPT_INFILESIZE` | body length, when known | Advertises `Content-Length`. The length is the stream's size, else the request's single well-formed `Content-Length`; omitted when neither gives one (→ `Transfer-Encoding: chunked`). |
 
 `SELECT_TIMEOUT` (private, `1.0`s) bounds each `curl_multi_select()` park.
 
@@ -97,6 +97,8 @@ The client enforces a security baseline that callers cannot lower:
 ## Streaming model
 
 **Request body.** When the PSR-7 request carries a body, `applyRequestBody()` enables `CURLOPT_UPLOAD` and registers a `CURLOPT_READFUNCTION` that pulls `CHUNK_SIZE` bytes at a time from the request stream — a large multipart/chunked upload is forwarded without ever buffering the whole payload (unlike `CURLOPT_POSTFIELDS`). The request method set via `CURLOPT_CUSTOMREQUEST` is preserved. Known body lengths use `CURLOPT_INFILESIZE`; unknown lengths fall back to `Transfer-Encoding: chunked`.
+
+**One framing per body** *(changed in 0.1.0-beta7)*. The body length is the stream's own size, else the request's single well-formed `Content-Length` (a stream such as `php://input` in a FrankenPHP worker cannot report its size, while the client that sent it declared one), else unknown. When the client uploads a body, libcurl writes the framing itself, so the request's own `Content-Length` and `Transfer-Encoding` headers are left out. Before this, an unsized body went out chunked next to the caller's `Content-Length` — two framings in one request, which RFC 9112 §6.1 forbids and nginx refuses with 400. A request that sends no body keeps its headers as given. A caller that forwards a received request should give it its body only when it has one: an unsized empty stream is still sent as an empty chunked body.
 
 **Response.** The header callback (`CURLOPT_HEADERFUNCTION`) parses the status line and headers as libcurl emits them. The body callback (`CURLOPT_WRITEFUNCTION`) writes each chunk directly into a PSR-7 stream (typically `php://temp`-backed). The full body never lives in PHP memory; it streams from libcurl into the stream and out to the caller.
 

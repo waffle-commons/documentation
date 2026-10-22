@@ -34,6 +34,10 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- `reference/http-client.md` documents the body framing fixed in http-client: the length comes from the stream,
+  else from the request's single well-formed `Content-Length`, and the caller's `Content-Length` and
+  `Transfer-Encoding` are left out whenever libcurl frames an upload. It also tells forwarding callers to give a
+  received request its body only when it has one (found by the EcoShield gateway, GATE-02).
 - `how-to/configure-connection-pooling.md` no longer says `maxConnections` has no `waffle.database.*` key: the
   skeleton has read `waffle.database.pool_size` (`DB_POOL_SIZE`) since beta6. `explanation/connection-pooling.md`
   gives the probe's real cost, two round trips under PostgreSQL, and drops a method name the pool never exposed.
