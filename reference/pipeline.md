@@ -54,7 +54,7 @@ Routes the request by calling `RouterInterface::matchRequest()` (which returns t
 - `_arguments` — `array<string, mixed>` of per-argument metadata from `#[Argument]`.
 - `_path` — original route path pattern.
 - `_name` — route name from `#[Route(name: ...)]`.
-- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the URI.
+- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the URI. Named by `Constant::ATTR_PARAMS` (added in 0.1.0-beta7).
 
 When no route matches, raises `Waffle\Commons\Contracts\Routing\Exception\RouteNotFoundException` (the concrete `final` class added in Beta-1, which implements `RouteNotFoundExceptionInterface` and is rendered as RFC 7807 `404` by `JsonErrorRenderer`). Beta-0 raised a generic `RuntimeException` here and produced a `500`; that mapping has been fixed.
 

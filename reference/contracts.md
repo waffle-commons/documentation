@@ -740,6 +740,7 @@ public const string METHOD_POST      = 'POST';
 public const string ATTR_CLASSNAME   = '_classname';
 public const string ATTR_CONTROLLER  = '_controller';
 public const string ATTR_METHOD      = '_method';
+public const string ATTR_PARAMS      = '_params';      // added in 0.1.0-beta7
 ```
 
 Component-specific constant classes live alongside their interfaces: `Waffle\Commons\Contracts\Cache\Constant` (backend identifiers `BACKEND_ARRAY`, `BACKEND_FILE`, `BACKEND_REDIS`), `Waffle\Commons\Contracts\Console\Constant`, `Waffle\Commons\Contracts\Security\Csrf\Constant`, etc.

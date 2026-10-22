@@ -42,6 +42,9 @@ Released in lockstep with the Waffle Commons umbrella tag.
 - `reference/console.md`, `reference/data.md` and `reference/contracts.md` document the migration commands,
   `MigrationRunner::rollback()` and `status()`, `MigrationLedger`, `MigrationState` and `MigrationStatus` (OPS-03).
 - `reference/contracts.md` shows `KernelInterface::$container` (CARRY-04).
+- `reference/contracts.md`, `routing.md` and `pipeline.md` name `Constant::ATTR_PARAMS` for the `_params`
+  attribute. `reference/core.md` now says `ControllerDispatcher` reads `_classname`, `_method` and `_params`: it
+  said `_controller` and `_route_params`, which the code never read (CARRY-06).
 
 ## [0.1.0-beta6] — 2026-09
 
