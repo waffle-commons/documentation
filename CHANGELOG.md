@@ -13,6 +13,8 @@ Released in lockstep with the Waffle Commons umbrella tag.
 ## [Unreleased]
 
 ### Added
+- `reference/telemetry.md` documents the dev profiler headers (DXP-01): `ProfilerHeadersMiddleware`, `QueryCountingTracer`,
+  what each header measures and what `X-Waffle-Queries` cannot see; its worker-safety note names the one resettable class.
 - The pool's ping freshness window (CARRY-01): `reference/connection-pool.md` and `reference/data.md` document
   `PDOConnectionPool`'s `pingFreshnessMs` and its trade-off, `explanation/connection-pooling.md` explains why only
   a proof of life (a connection or an answered probe) opens the window, `how-to/configure-connection-pooling.md`
