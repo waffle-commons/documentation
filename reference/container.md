@@ -51,7 +51,7 @@ Added in 0.1.0-beta7. Not part of the contract:
 public function memoise(string $id, Closure $build): object|string|null;
 ```
 
-It returns the instance the container holds for `$id`. The first time, it builds that instance with `$build` (under the same circular-dependency guard as `get()`, which throws `ContainerException`) and keeps it. `get()` builds through it, and so does a compiled container ([`reference/aot`](aot.md)) for the services it wires without reflection. Whichever path resolves an id first, every later resolution returns that instance, and `reset()` covers it once. It stores instances, never definitions, so it keeps working after `lock()`.
+It returns the instance the container holds for `$id`. The first time, it builds that instance with `$build` (under the same circular-dependency guard as `get()`, which throws `ContainerException`) and keeps it. `get()` builds through it, and so does a compiled container ([`reference/aot`](aot.md)) for the services it wires without reflection. Whichever path resolves an id first, every later resolution returns that instance, and `reset()` covers it once. It stores instances, never definitions, so it keeps working after `lock()`, but only for an id the container can resolve: an unknown id throws `NotFoundException`, as in `get()`, so it cannot add a service after `lock()`.
 
 ## Resolution algorithm — `get($id)`
 
