@@ -178,11 +178,14 @@ final readonly class RateLimitMiddleware implements MiddlewareInterface
 ```php
 final readonly class RateLimiter implements RateLimiterInterface
 {
+    public const string STORAGE_ERRORS_METRIC = 'waffle_ratelimit_storage_errors_total';
+
     public function __construct(
         private LimiterStateStorageInterface $storage,
         private TokenBucket $bucket,
         private StorageFailureMode $onStorageFailure = StorageFailureMode::Open,
         private LoggerInterface $logger = new NullLogger(),
+        private ?MetricsRegistryInterface $metrics = null,
     ) {}
 
     /** @throws InvalidArgumentException When the key is empty or the cost does not fit the bucket. */
@@ -192,8 +195,9 @@ final readonly class RateLimiter implements RateLimiterInterface
 ```
 
 One bucket, one storage, one failure mode; its state lives in the storage, never in worker memory. A
-`StateStorageExceptionInterface` from the storage never escapes: the limiter logs a warning and returns the
-failure mode's decision — allowed with `enforced: false` under `Open`, denied with `enforced: false` and
+`StateStorageExceptionInterface` from the storage never escapes: the limiter logs a warning, increments
+`waffle_ratelimit_storage_errors_total{mode}` (labelled by mode only — a key would be unbounded cardinality),
+and returns the failure mode's decision — allowed with `enforced: false` under `Open`, denied with `enforced: false` and
 `retryAfterSeconds: 1` under `Closed`.
 
 ### `Waffle\Commons\Security\RateLimit\StorageFailureMode`

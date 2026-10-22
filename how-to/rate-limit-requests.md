@@ -51,7 +51,10 @@ and `/waffle-metrics`, so orchestrator and Prometheus traffic is never throttled
 
 ```php
 // src/Factory/AppKernelFactory.php — after AuthenticationMiddleware
-RateLimitFactory::register($stack, $config, $securityContext, $responseFactory, $secureLogger);
+$rateLimit = RateLimitFactory::middleware($config, $securityContext, $responseFactory, $secureLogger, $metricsRegistry);
+if ($rateLimit !== null) {
+    $stack->add(middleware: $rateLimit);
+}
 ```
 
 Its core builds the limiter from the configuration:
@@ -62,14 +65,15 @@ $limiter = new RateLimiter(
     new TokenBucket($capacity, $periodSeconds),
     StorageFailureMode::tryFrom($onStorageFailure) ?? StorageFailureMode::Open,
     $logger,
+    $metrics,   // counts storage outages
 );
 
-$stack->add(middleware: new RateLimitMiddleware(
+return new RateLimitMiddleware(
     $limiter,
     new TrustedProxyClientIpResolver($trustedProxies),
     $securityContext,
     $responseFactory,
-));
+);
 ```
 
 The bucket keys are `sub:<subject>` for an authenticated request, `ip:<address>` otherwise, and
@@ -99,7 +103,9 @@ its own bucket.
   must not take the whole API down.
 - **`closed`**: the request is refused with `503`. Use it where the limiter is the brute-force defence.
 
-Authentication and authorization stay fail-closed whatever this setting says.
+Either way the outage increments `waffle_ratelimit_storage_errors_total{mode}` on `/waffle-metrics`, so an alert
+can catch a limiter that has silently stopped limiting. Authentication and authorization stay fail-closed
+whatever this setting says.
 
 ## 6. Protect a login endpoint with its own limiter
 

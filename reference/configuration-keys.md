@@ -5,7 +5,9 @@
 Each key below is declared in the skeleton's `config/app.yaml`. **Template value** is what that file sets;
 **default** is what the code uses when the key is absent. A `%env(VAR)%` value is read from the environment
 registry (the process environment wins over `.env`, see [config.md](config.md#environment-registry)).
-The keys are frozen by beta8 `[FRZ-03]`; names may still change until then.
+The keys are frozen by beta8 `[FRZ-03]`; names may still change until then. `waffle.debug`, `waffle.log.channel` and
+`waffle.log.stream` were removed in `0.1.0-beta7`: nothing read them (`public/index.php` reads `APP_DEBUG` itself,
+and the kernel factory builds its loggers with their channels).
 
 Most keys are read by the application's kernel factory (`App\Factory\*` in the skeleton), not by the
 components: a component receives the value through its constructor. Where a component reads a key itself,
@@ -16,7 +18,6 @@ the reader names it.
 | Key | Type | Template value | Default | Read by |
 | :--- | :--- | :--- | :--- | :--- |
 | `waffle.env` | string | `%env(APP_ENV)%` | — | The demo `AuthDemoController` only. The kernel's environment comes from `APP_ENV` in `public/index.php`. |
-| `waffle.debug` | bool | `%env(APP_DEBUG)%` | — | **Not read.** `public/index.php` reads `APP_DEBUG` from the environment registry. |
 | `waffle.trusted_hosts` | list<string> | `[localhost]` | `[]` | `AppKernelFactory` → `TrustedHostMiddleware`. The `TRUSTED_HOSTS` environment variable (comma-separated) replaces the list when it is set. |
 
 ## Probes and shutdown — OPS-01/02
@@ -50,6 +51,8 @@ Read by the skeleton's `App\Factory\RateLimitFactory`. See [How to: Rate-Limit R
 | `waffle.security.rate_limit.on_storage_failure` | string | `open` | `open` | `open` or `closed` (`StorageFailureMode`); an unknown value means `open`. |
 | `waffle.security.rate_limit.trusted_proxies` | list<string> | `[]` | `[]` | Proxy addresses or CIDR ranges whose `X-Forwarded-For` is read. A non-string entry is ignored; a malformed one refuses the boot. |
 | `waffle.security.rate_limit.redis_dsn` | string | `%env(REDIS_DSN)%` | `redis://127.0.0.1:6379` | `redis://[:password@]host[:port]`. *Added `0.1.0-beta7`.* |
+
+A Redis outage applies `on_storage_failure` with a warning and increments `waffle_ratelimit_storage_errors_total{mode}`.
 
 ## Outbound HTTP client — NET-02/03
 
@@ -95,14 +98,7 @@ instead (RFC-024 §5.3).
 | :--- | :--- | :--- | :--- | :--- |
 | `waffle.paths.controllers` | string | `src/Controller` | none | `AbstractKernel` (container discovery, under `APP_ROOT`), the `Router`, and `bin/waffle`. |
 | `waffle.paths.services` | string | `src/Service` | none | `AbstractKernel` (container discovery, under `APP_ROOT`). |
-| `waffle.paths.event_listeners` | string | `app/EventListener` | none | `EventListenerDiscovery`, as given: a relative path resolves against the process's working directory, not `APP_ROOT`. The skeleton tree has `src/EventListener/` and no `app/` directory, so point the key there to use it. |
-
-## Logging
-
-| Key | Type | Template value | Default | Read by |
-| :--- | :--- | :--- | :--- | :--- |
-| `waffle.log.channel` | string | `app` | — | **Not read.** Loggers are built with their channel in the kernel factory (`LogChannel::*`). |
-| `waffle.log.stream` | string | `php://stderr` | — | **Not read.** `StreamLogger` writes to `php://stderr` by default. |
+| `waffle.paths.event_listeners` | string | `src/EventListener` | none | `EventListenerDiscovery`, under `APP_ROOT` like the two keys above. *Fixed in `0.1.0-beta7`:* the template pointed at `app/EventListener`, which the skeleton does not have, and the path was not resolved under `APP_ROOT`. |
 
 ## Cache — RFC-013
 

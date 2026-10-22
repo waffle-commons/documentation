@@ -26,6 +26,9 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- Findings fixed the same day: `reference/configuration-keys.md` drops `waffle.debug`, `waffle.log.channel` and
+  `waffle.log.stream` (removed from the skeleton) and shows `waffle.paths.event_listeners` resolved under
+  `APP_ROOT`; `security.md` and the rate-limit how-to show the `waffle_ratelimit_storage_errors_total` metric.
 - `reference/http-client.md`: `Client` implements `SettlingClientInterface` and takes its timeouts from a
   `TimeoutPolicy` (`withTimeouts()`): they are no longer hardcoded ceilings. New *Resilience* section
   (`RetryingClient`, `CircuitBreakerClient`, `CircuitObservers`) and `CircuitOpenException` in the exception
