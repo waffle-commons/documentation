@@ -8,11 +8,11 @@
 
 > [!WARNING]
 > **BETA SOFTWARE**
-> This version (`0.1.0-beta6`) is the **stabilisation, audit and measurement** release. It adds no new components: the ecosystem stops and hardens. Three independent audit engines were planned and two completed (the third is recorded as an accepted, documented residual); all seventeen gate-blocking findings were fixed natively with zero Mago baselines or suppressions — SQL/CQL identifier quoting on read *and* write paths, code-generation injection in the Maker, an unrestricted `unserialize()` in the route cache, a username-enumeration timing oracle in `BasicAuthenticator`, a missing minimum-length floor on HS* JWT secrets, upload-path containment, fail-secure YAML parsing, escape-by-default for controller string returns, validate-before-cast route parameters, object-level ABAC via the new `SubjectResolverInterface`, and AOT/interpreted container reset parity. The entire documentation surface was verified page-by-page against the live API, and the runtime performance claim was measured for the first time against a reproducible tri-engine k6 harness — which is why the long-standing "5–10× RAM vs PHP-FPM" figure is **not** published in that form: measurement shows PHP-FPM uses less total RAM below ~12 concurrent requests, so the defensible claim is the growth *slope* (memory grows 10.5× slower per concurrent request), alongside 7.8× the throughput of Symfony on php-fpm at 8.7× lower p50. Beta-5's runtime power (AOT, connection pooling, async deferral, reactive broadcast, telemetry, WebAuthn) and the Beta-1→4 security foundations all remain in place; `wfl igor` stays a 0-KO gate. Do not use in critical production environments without an independent security audit.
+> This version (`0.1.0-beta7`) is the **production surface** release: it builds what an API in production needs and the framework did not have yet. Four components arrive: `queue` (background jobs on Redis Streams, with a dead-letter store and a `queue:work` worker that drains on SIGTERM), `openapi` (an OpenAPI 3.1 document generated from `#[Route]` attributes and DTOs), `serializer` (compiled, reflection-free DTO normalizers and `Accept` negotiation) and `testing` (an in-process kernel test bridge with test doubles). Around them, a token-bucket rate limiter shared in Redis (NET-01); bounded timeouts, retries and a per-origin circuit breaker for outbound calls (NET-02/03); `/healthz` and `/readyz` probes, with readiness dropped before shutdown (OPS-01/02); reversible migrations with `db:status` and `db:rollback` (OPS-03); and dev profiler headers (DXP-01). The EcoShield Gateway alpha, built on this release, found a request-body framing bug in `http-client`, fixed here. The skeleton image moves to FrankenPHP 1.13.2 on PHP 8.5.12 for the PHP2Shell fixes. Mago stays at zero output with no baseline, and `wfl igor` stays a 0-KO gate. The four new components are not documented here yet (beta8 `[DOC-01]`). Beta-6's audit fixes and measured benchmark, Beta-5's runtime power (AOT, connection pooling, async deferral, reactive broadcast, telemetry, WebAuthn) and the Beta-1→4 security foundations all remain in place. Do not use in critical production environments without an independent security audit.
 
-## 🎯 The Beta-6 contract
+## 🎯 The Beta-7 contract
 
-Waffle Beta-6 is built around two non-negotiable principles:
+Waffle Beta-7 is built around two non-negotiable principles:
 
 - **🧹 Zero-Debt.** Every component passes `vendor/bin/mago fmt`, `vendor/bin/mago lint`, `vendor/bin/mago analyze`, `vendor/bin/mago guard`, and `composer tests` with **zero errors, zero warnings, zero deprecations, zero infos, zero notices, zero helps, zero notes** — now including a repo-wide `cyclomatic-complexity` ceiling. No baseline files (`mago-*-baseline.toml`) exist anywhere in the tree — exceptions to the rule live as documented, reviewable `[analyzer.ignore]` entries in each component's `mago.toml`.
 - **🐘 PHP 8.5 Strict.** Property Hooks for DTO validation, Asymmetric Visibility (`public private(set)`) for safe state exposure, typed constants for ecosystem-wide identifiers, `final readonly` for value objects, and `#[\Override]` on every interface implementation. The `mixed` type is forbidden in component surfaces (PSR-mandated exceptions aside).
@@ -74,7 +74,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 
 ***
 
-*Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*
+*Written for Waffle Framework 0.1.0-beta7 on PHP 8.5 (the skeleton image runs 8.5.12). The pages were verified one by one against 0.1.0-beta6 and updated with each beta7 change; the four new components are documented in beta8 `[DOC-01]`.*
 
 ***
 

@@ -10,7 +10,9 @@ Released in lockstep with the Waffle Commons umbrella tag.
 > Entries begin at `0.1.0-beta6`, when this changelog was introduced; earlier tags
 > (`0.1.0-alpha5` → `0.1.0-beta5`) exist but were not accompanied by release notes here.
 
-## [Unreleased]
+## [0.1.0-beta7] — 2026-11
+
+**Theme: the production surface (NET, OPS, DXP-01 and the carry-overs) documented as it landed.**
 
 ### Added
 - `reference/telemetry.md` documents the dev profiler headers (DXP-01): `ProfilerHeadersMiddleware`, `QueryCountingTracer`,
@@ -64,6 +66,10 @@ Released in lockstep with the Waffle Commons umbrella tag.
   building its inlined services through it: every path now shares one instance, `reset()` only delegates, and
   the Beta-6 "one instance per memo" constraint is gone. Its worker-safety paragraph no longer calls the memo
   per-request: it lives as long as the worker (CARRY-06).
+- `reference/configuration-keys.md` no longer says the workspace reads the limiter's and the breaker's Redis
+  from `waffle.queue.redis_dsn`: it reads their own `redis_dsn` keys, like the skeleton.
+- `README.md` describes `0.1.0-beta7`: the four new components, NET, OPS and DXP-01, and what is not
+  documented yet (the new components, beta8 `[DOC-01]`).
 
 ## [0.1.0-beta6] — 2026-09
 
