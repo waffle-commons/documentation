@@ -76,9 +76,6 @@ Read by the skeleton's `App\Factory\HttpClientFactory`; a missing key takes the 
 | `waffle.http_client.breaker.half_open_trials` | int | `1` | `1` | ≥ 1 |
 | `waffle.http_client.breaker.redis_dsn` | string | `%env(REDIS_DSN)%` | `redis://127.0.0.1:6379` | *Added `0.1.0-beta7`.* |
 
-The workspace demo application reads the breaker's and the limiter's Redis from `waffle.queue.redis_dsn`
-instead (RFC-024 §5.3).
-
 ## Universal Authentication Bridge — RFC-021
 
 | Key | Type | Template value | Default | Read by |
