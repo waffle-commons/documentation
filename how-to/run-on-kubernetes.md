@@ -45,9 +45,10 @@ The middleware is mounted before `TrustedHostMiddleware`, because kubelet probes
 
 `timeoutSeconds: 3` leaves room for each check's own timeout, as RFC-023 §3.2 asks, so a dependency that hangs
 yields a 503 instead of a probe that times out. Opening a database connection gives up after
-`waffle.database.connect_timeout` (`DB_CONNECT_TIMEOUT`, 2 s by default). A Redis read on the skeleton's phpredis
-pools (rate limiter, circuit breaker) gives up after 1 s, and so does opening the connection. Kubernetes' default of
-1 s would cut a `/readyz` that is still waiting for the database.
+`waffle.database.connect_timeout` (`DB_CONNECT_TIMEOUT`, 2 s by default). Redis gives up after 1 s, to connect and
+to read, on the skeleton's phpredis pools (rate limiter, circuit breaker) and on the cache's Predis client unless
+its DSN sets its own timeouts. Kubernetes' default of 1 s would cut a `/readyz` that is still waiting for the
+database.
 
 Each `/readyz` call times every probe and exports `waffle_health_check_duration_seconds{check}` and
 `waffle_health_check_up{check}` on `/waffle-metrics`.
