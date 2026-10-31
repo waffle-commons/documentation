@@ -12,9 +12,18 @@ Released in lockstep with the Waffle Commons umbrella tag.
 
 ## [0.1.0-beta7] — 2026-11
 
-**Theme: the production surface (NET, OPS, DXP-01 and the carry-overs) documented as it landed.**
+**Theme: the production surface (NET, OPS, DXP-01, the four new components and the carry-overs) documented as it landed.**
 
 ### Added
+- The four new components each get a reference page and a how-to guide, every signature checked against the source:
+  `reference/queue.md` (the queue and mailer contracts, the Redis Streams driver, its keys, the `queue:work` options,
+  retries and exit codes) with `how-to/run-background-jobs.md`; `reference/serializer.md` (`DtoSerializerInterface`,
+  `#[ListOf]`, the compiled and interpreted normalizers, `serializer:compile`, `ContentNegotiationMiddleware`, the
+  errors and their statuses) with `how-to/serialize-dtos.md`; `reference/openapi.md` (`openapi:generate`, what each
+  route and DTO becomes, the `#[OA\*]` attributes, the debug-only `/_docs`) with
+  `how-to/generate-an-openapi-document.md`; `reference/testing.md` (`WaffleTestCase`, `KernelClient`, `TestResponse`,
+  the doubles and the exceptions) with `how-to/test-through-the-kernel.md`. `reference/index.md` lists them (its
+  title moves to Beta-7) and the README links the guides.
 - `reference/telemetry.md` documents the dev profiler headers (DXP-01): `ProfilerHeadersMiddleware`, `QueryCountingTracer`,
   what each header measures and what `X-Waffle-Queries` cannot see; its worker-safety note names the one resettable class.
 - The pool's ping freshness window (CARRY-01): `reference/connection-pool.md` and `reference/data.md` document

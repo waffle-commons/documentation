@@ -51,6 +51,10 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Rate-Limit Requests**](how-to/rate-limit-requests.md): a token bucket per subject or client IP, shared in Redis, with `RateLimit-*` headers and `429` (NET-01).
 - [**Make Outbound Calls Resilient**](how-to/make-outbound-calls-resilient.md): timeouts, bounded retries and a per-origin circuit breaker (NET-02/03).
 - [**Run on Kubernetes**](how-to/run-on-kubernetes.md): `/healthz` and `/readyz`, draining before SIGTERM, migrations as a Job (OPS-01/02/03).
+- [**Run Background Jobs**](how-to/run-background-jobs.md): dispatch messages to Redis Streams, run `queue:work`, retries and dead letters, mail in the background (QUEUE-01/02/03).
+- [**Serialize DTOs**](how-to/serialize-dtos.md): `#[Dto]` ↔ JSON at the HTTP boundary, compiled normalizers for `WAFFLE_AOT=1`, `Accept` negotiation (API-02).
+- [**Generate an OpenAPI Document**](how-to/generate-an-openapi-document.md): OpenAPI 3.1 from routes and DTOs, `#[OA\*]` attributes, Swagger UI in debug mode (API-01).
+- [**Test Through the Kernel**](how-to/test-through-the-kernel.md): `WaffleTestCase` requests through the real pipeline, with clock, queue, mailer and HTTP doubles (TEST-01).
 - [**Work on Multiple Components Locally**](how-to/local-development-workflow.md): `wfl link` / `unlink` / `debug` / `bench`.
 
 ### Need API Details?
@@ -58,6 +62,7 @@ We follow the **Diátaxis** documentation framework to help you find exactly wha
 - [**Auth**](reference/auth.md)
 - [**Routing**](reference/routing.md)
 - [**Data & Persistence**](reference/data.md)
+- [**Queue**](reference/queue.md) · [**OpenAPI**](reference/openapi.md) · [**Serializer**](reference/serializer.md) · [**Testing**](reference/testing.md)
 - [**`wfl` Developer CLI**](reference/wfl.md)
 - [**Configuration Keys**](reference/configuration-keys.md)
 - [**Index of Components**](reference/index.md)
