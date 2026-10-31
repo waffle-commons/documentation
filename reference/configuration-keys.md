@@ -128,6 +128,7 @@ See [How to: Run Database Migrations](../how-to/database-migrations.md).
 | `waffle.database.charset` | string | `utf8` | `utf8` (ignored by `pgsql`) |
 | `waffle.database.pool_size` | string | `%env(DB_POOL_SIZE)%` | `8`; an invalid value falls back to it |
 | `waffle.database.ping_freshness_ms` | string | `%env(DB_PING_FRESHNESS_MS)%` | `500`; `0` probes every lease, a negative or invalid value falls back to `500` (*added in `0.1.0-beta7`*, CARRY-01) |
+| `waffle.database.connect_timeout` | string | `%env(DB_CONNECT_TIMEOUT)%` | `2` seconds, passed as `PDO::ATTR_TIMEOUT` for `pgsql`, `mysql` and `mariadb` (SQLite opens no network connection); below `1` or invalid falls back to `2`. Keep it shorter than the readiness probe's `timeoutSeconds` (*added in `0.1.0-beta7`*, RFC-023 §3.2) |
 | `waffle.database.migrations_path` | string | `migrations` | `migrations` (`MigrationRunner::DEFAULT_PATH`) |
 
 ## Related

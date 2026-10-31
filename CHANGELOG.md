@@ -36,6 +36,10 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- `how-to/run-on-kubernetes.md`: the readiness probe sets `timeoutSeconds: 3`, longer than each check's own
+  timeout (RFC-023 §3.2): a database connection gives up after `waffle.database.connect_timeout` (2 s), a Redis
+  read on the skeleton's phpredis pools after 1 s. `reference/configuration-keys.md` lists the new
+  `waffle.database.connect_timeout` key (`DB_CONNECT_TIMEOUT`).
 - `reference/http-client.md` documents the body framing fixed in http-client: the length comes from the stream,
   else from the request's single well-formed `Content-Length`, and the caller's `Content-Length` and
   `Transfer-Encoding` are left out whenever libcurl frames an upload. It also tells forwarding callers to give a
