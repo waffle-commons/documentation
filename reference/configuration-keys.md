@@ -105,7 +105,7 @@ Read by `AppKernelFactory::buildCache()` → `Waffle\Commons\Cache\Factory\Cache
 | :--- | :--- | :--- | :--- | :--- |
 | `waffle.cache.adapter` | string | `redis` | `array` | `array`, `file` or `redis`. `redis` also registers the cache readiness probe. |
 | `waffle.cache.directory` | string | `var/cache/psr16` | `var/cache/psr16` | `file` adapter, under `APP_ROOT`. |
-| `waffle.cache.redis_dsn` | string | `%env(REDIS_DSN)%` | Predis default (`tcp://127.0.0.1:6379`) | `redis` adapter, through Predis. |
+| `waffle.cache.redis_dsn` | string | `%env(REDIS_DSN)%` | Predis default (`tcp://127.0.0.1:6379`) | `redis` adapter, through Predis. Connecting and each read give up after 1 s unless the DSN sets `?timeout=…&read_write_timeout=…` (*since `0.1.0-beta7`*, RFC-023 §3.2). |
 | `waffle.cache.default_ttl` | int | `3600` | none | Seconds. |
 | `waffle.cache.prefix` | string | `waffle:cache:` | none | `redis` adapter. |
 
