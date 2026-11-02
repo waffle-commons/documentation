@@ -45,6 +45,11 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- `explanation/performance.md`: *Measured numbers* now gives the Beta-7 series (FrankenPHP 1.13.2, four engines,
+  Engine D doing Waffle's per-request work in Symfony): JSON at parity, database-backed requests 0.3–0.4 ms slower
+  than Symfony doing the same work, php-fpm's memory growing 12.5× faster per concurrent request (crossover near
+  14, 2.81× at 128), the two-hour soaks. The pool result stays as a Beta-6 measurement without its throughput
+  figure, and the unmeasured "sub-millisecond" claims are gone.
 - `how-to/run-on-kubernetes.md`: the readiness probe sets `timeoutSeconds: 3`, longer than each check's own
   timeout (RFC-023 §3.2): a database connection gives up after `waffle.database.connect_timeout` (2 s), a Redis
   read on the skeleton's phpredis pools after 1 s. `reference/configuration-keys.md` lists the new
