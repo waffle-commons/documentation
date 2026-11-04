@@ -12,10 +12,13 @@ Welcome to the Waffle Framework. This guide walks you through scaffolding a new 
 ## 1. Create the project
 
 ```bash
-composer create-project waffle-commons/skeleton my-app
+composer create-project waffle-commons/skeleton:0.1.0-beta6 my-app
 cd my-app
 docker compose up -d
 ```
+
+Name the version: until `1.0.0` every Waffle release is a beta, and Composer offers only stable releases unless you
+name one. This guide was written for `0.1.0-beta6`.
 
 The default skeleton serves on `https://localhost/` (FrankenPHP terminates TLS with a self-signed cert).
 

@@ -109,8 +109,11 @@ Read by `AppKernelFactory::buildCache()` → `Waffle\Commons\Cache\Factory\Cache
 | `waffle.cache.default_ttl` | int | `3600` | none | Seconds. |
 | `waffle.cache.prefix` | string | `waffle:cache:` | none | `redis` adapter. |
 
-With `adapter: redis`, the cache must reach Redis when the kernel boots: the router reads its route cache
-there, and `RedisCache` throws `CacheBackendUnavailableException` rather than serving without it.
+With `adapter: redis`, `RedisCache` throws `CacheBackendUnavailableException` when it cannot reach Redis,
+rather than serving without it, and each caller decides how to degrade (RFC-013 §4). The router reads its
+route cache when the kernel boots and treats that exception as a miss: it discovers the routes, so a
+worker that starts or recycles during a Redis outage keeps serving, `/healthz` included, while `/readyz`
+reports the cache as down (*since `0.1.0-beta7`*).
 
 ## Database — RFC-022
 

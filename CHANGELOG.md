@@ -15,6 +15,12 @@ Released in lockstep with the Waffle Commons umbrella tag.
 **Theme: the production surface (NET, OPS, DXP-01, the four new components and the carry-overs) documented as it landed.**
 
 ### Added
+- `reference/utils.md` documents the two beta7 additions to utils, its stamp moving to Beta-7: `DtoShapeReader`
+  (`read()`, `readGraph()`, what counts as an input or an output, the supported field types and defaults), the
+  shape value objects (`DtoShape`, `InputField`, `OutputField`, `FieldType` and its named constructors, `TypeKind`)
+  and `UnsupportedDtoShapeException`, then the PSR-20 `SystemClock`, every signature checked against the source.
+  `reference/queue.md` adds `MailerExceptionInterface` (the `@throws` of `MailerInterface::send()`) and
+  `reference/cache.md` the `CacheFactory::REDIS_TIMEOUT` constant.
 - The four new components each get a reference page and a how-to guide, every signature checked against the source:
   `reference/queue.md` (the queue and mailer contracts, the Redis Streams driver, its keys, the `queue:work` options,
   retries and exit codes) with `how-to/run-background-jobs.md`; `reference/serializer.md` (`DtoSerializerInterface`,
@@ -45,6 +51,12 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- The router no longer needs Redis to boot: `reference/configuration-keys.md` and `reference/aot.md` say that an
+  unreachable cache backend is a miss at `Router::boot()`, so a worker that starts during a Redis outage discovers
+  its routes and serves `/healthz` while `/readyz` reports the cache down. The page said the opposite.
+- `tutorials/quick-start.md` and `tutorials/first-secured-crud-endpoint.md` name the version in their
+  `composer create-project` command (`waffle-commons/skeleton:0.1.0-beta6`, the release they were written for):
+  without one, Composer looks for a stable release and finds none, since every Waffle release is a beta.
 - `explanation/performance.md`: *Measured numbers* now gives the Beta-7 series (FrankenPHP 1.13.2, four engines,
   Engine D doing Waffle's per-request work in Symfony): JSON at parity, database-backed requests 0.3–0.4 ms slower
   than Symfony doing the same work, php-fpm's memory growing 12.5× faster per concurrent request (crossover near

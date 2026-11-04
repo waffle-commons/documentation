@@ -9,9 +9,12 @@ By the end you will have *seen* — not just read — Waffle's three security re
 ## 1. Create the project
 
 ```bash
-composer create-project waffle-commons/skeleton my-notes
+composer create-project waffle-commons/skeleton:0.1.0-beta6 my-notes
 cd my-notes
 ```
+
+Name the version: until `1.0.0` every Waffle release is a beta, and Composer offers only stable releases unless you
+name one. This lesson was written for `0.1.0-beta6`.
 
 Do not start the containers yet — the skeleton expects two backing services we add first.
 

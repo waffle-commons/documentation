@@ -37,6 +37,12 @@ Backend identifiers — exact constants from `Waffle\Commons\Contracts\Cache\Con
 
 Unknown identifier → `\InvalidArgumentException`. Backend construction failure → `Waffle\Commons\Cache\Exception\CacheBackendUnavailableException`.
 
+```php
+public const float REDIS_TIMEOUT = 1.0;
+```
+
+On its own, Predis waits 5 s to connect and PHP's `default_socket_timeout` (60 s) to read, so the cache's `/readyz` check could outlast the readiness probe. `CacheFactory` sets both to `REDIS_TIMEOUT` seconds; a DSN that sets its own (`?timeout=…&read_write_timeout=…`) keeps them (*since `0.1.0-beta7`*, RFC-023 §3.2).
+
 ## Connection tracing (DIAG-03)
 
 `CacheFactory` accepts an optional dev-only `?Waffle\Commons\Contracts\Data\Connection\ConnectionTrackerInterface`; when present it is threaded into `RedisCache`, which registers its client (`ConnectionKind::Redis`) so the runtime's orphaned-connection tracer can report a Redis socket still open at request end. In production the tracker is `null` and the hook is a zero-cost no-op. See [runtime.md → Orphaned-connection tracer](runtime.md#orphaned-connection-tracer--connectiontracker-diag-03).

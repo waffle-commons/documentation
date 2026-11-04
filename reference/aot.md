@@ -132,6 +132,7 @@ Each node is a `Waffle\Commons\Routing\Trie\TrieNode` (`final`, `@internal`); `T
 
 - Cache key `waffle.routes.trie` (`TRIE_CACHE_KEY`) — a prebuilt trie array rehydrated via `RouteTrie::fromArray()`.
 - Cache key `waffle.routes.discovered` (`CACHE_KEY`) — the priority-sorted `MatchedRoute` list; when only this is cached, the router rebuilds the trie from it (`RouteTrie::build()`).
+- An unreachable cache backend is a miss: when a read or the write throws `CacheBackendUnavailableExceptionInterface`, `boot()` drops anything it read before the failure and discovers the routes (*since `0.1.0-beta7`*).
 - With no trie at all (routes seeded directly without a boot pass), `resolve()` falls back to the sequential matcher — observably equivalent.
 
 ## Route compile command — `Waffle\Commons\Console\Command\RouteCompileCommand`

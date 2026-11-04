@@ -180,9 +180,17 @@ without coupling to a driver.
 ```php
 interface MailerInterface
 {
+    /** @throws MailerExceptionInterface When the transport refuses the email or cannot be reached. */
     public function send(Email $email): void;
 }
+
+namespace Waffle\Commons\Contracts\Mailer\Exception;
+
+interface MailerExceptionInterface extends Throwable {}
 ```
+
+A mailer reports a transport failure (the transport refused the email or could not be reached) through
+`MailerExceptionInterface`, so a worker can catch it without coupling to a transport.
 
 Sending transactional mail is a **contract only**: SMTP and API transports are post-v1, and an application binds any
 mailer it chooses. Sending blocks on the network, so a request does not send: it dispatches the `Email`, which is a
