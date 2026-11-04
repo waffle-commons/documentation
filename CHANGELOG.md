@@ -51,6 +51,12 @@ Released in lockstep with the Waffle Commons umbrella tag.
   (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
 
 ### Changed
+- `APP_SECRET` is the application's root secret, and the CSRF key derives from it unless `WAFFLE_CSRF_SECRET` is
+  set (HKDF-SHA256, context `waffle-commons/csrf/v1`, in the skeleton's and the workspace's `SecretFactory`).
+  `reference/configuration-keys.md` gains the `waffle.secret` row, and its CSRF and auth rows name their new reader;
+  `reference/security.md`, `how-to/secure-a-controller.md`, `how-to/run-on-kubernetes.md` (the same `APP_SECRET`
+  on every replica) and `explanation/security-csrf-double-submit.md` (why a shared root, and how to rotate) say
+  which secrets production needs; `reference/wfl.md` says that `wfl csrf-init` signs with the derived key too.
 - The router no longer needs Redis to boot: `reference/configuration-keys.md` and `reference/aot.md` say that an
   unreachable cache backend is a miss at `Router::boot()`, so a worker that starts during a Redis outage discovers
   its routes and serves `/healthz` while `/readyz` reports the cache down. The page said the opposite.

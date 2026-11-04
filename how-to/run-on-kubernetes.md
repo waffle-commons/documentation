@@ -138,8 +138,10 @@ code can still run against, so the old pods keep working while the new ones star
 ## 5. Feed it its configuration
 
 Everything environment-specific comes from the environment, never from the image: `APP_ENV=prod`,
-`APP_DEBUG=0`, `WAFFLE_CSRF_SECRET` and `WAFFLE_AUTH_SECRET` (32 bytes or more, or the boot is refused in
-production), `DB_*`, `REDIS_DSN`, `TRUSTED_HOSTS`. Keep secrets in a Secret, as the Job above does.
+`APP_DEBUG=0`, `APP_SECRET` and `WAFFLE_AUTH_SECRET` (32 bytes or more, or the boot is refused in
+production), `DB_*`, `REDIS_DSN`, `TRUSTED_HOSTS`. Keep secrets in a Secret, as the Job above does. The CSRF
+key derives from `APP_SECRET` unless `WAFFLE_CSRF_SECRET` is set, so give every replica the same `APP_SECRET`:
+a token one pod issues must validate on the pod that receives the next request.
 
 ## Related
 

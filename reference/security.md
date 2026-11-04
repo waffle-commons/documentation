@@ -18,13 +18,22 @@ Since `0.1.0-beta7`, `RateLimitMiddleware` sits right after `Authentication` whe
 ```yaml
 # config/app.yaml
 waffle:
+  # Root secret (32+ bytes). The skeleton derives the CSRF key from it when
+  # security.csrf.secret is empty (HKDF-SHA256, SecretFactory::csrf()).
+  secret: '%env(APP_SECRET)%'
   security:
     level: 5
     csrf:
-      # 32+ byte signing secret. Resolved from env WAFFLE_CSRF_SECRET when set
-      # to '%env(...)%'. In prod a missing/short value aborts boot.
+      # Optional 32+ byte signing key, resolved from env WAFFLE_CSRF_SECRET. In
+      # prod, a short value, or neither it nor a valid APP_SECRET, aborts boot.
       secret: '%env(WAFFLE_CSRF_SECRET)%'
 ```
+
+`CsrfTokenManager` takes the key as given (32 bytes or more, or `InvalidArgumentException`); where the key comes
+from is the application's choice. Since `0.1.0-beta7`, the skeleton and the workspace resolve it in
+`SecretFactory::csrf()`: `WAFFLE_CSRF_SECRET` when it is set, otherwise
+`hash_hkdf('sha256', APP_SECRET, 32, 'waffle-commons/csrf/v1')`, so every worker, and every replica that shares
+`APP_SECRET`, signs with the same key.
 
 ## `Security` — exact signature
 

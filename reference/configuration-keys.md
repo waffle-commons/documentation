@@ -35,7 +35,8 @@ not `waffle.*` keys — see [How to: Run on Kubernetes](../how-to/run-on-kuberne
 | Key | Type | Template value | Default | Read by |
 | :--- | :--- | :--- | :--- | :--- |
 | `waffle.security.level` | int | `10` | `1` | `Waffle\Commons\Security\Security` itself. The `SecureContainer` integrity ladder, 1 to 10. |
-| `waffle.security.csrf.secret` | string | `%env(WAFFLE_CSRF_SECRET)%` | the `WAFFLE_CSRF_SECRET` variable | `AppKernelFactory::resolveCsrfSecret()`. Shorter than 32 bytes in production: the boot is refused. |
+| `waffle.secret` | string | `%env(APP_SECRET)%` | the `APP_SECRET` variable | `SecretFactory::csrf()`. The application's root secret: when `waffle.security.csrf.secret` is empty, the CSRF key is 32 bytes of HKDF-SHA256 over it (context `waffle-commons/csrf/v1`), the same in every worker. Shorter than 32 bytes in production, with no CSRF secret: the boot is refused. Never used for `waffle.auth.secret`. |
+| `waffle.security.csrf.secret` | string | `%env(WAFFLE_CSRF_SECRET)%` | the `WAFFLE_CSRF_SECRET` variable | `SecretFactory::csrf()`. Optional: set, it is the CSRF key instead of the one derived from `waffle.secret`. Set but shorter than 32 bytes in production: the boot is refused. |
 | `waffle.security.cors.allowed_origins` | list<string> | `[]` | `[]` | `AppKernelFactory` → `CorsPolicy`. Empty refuses every cross-origin request. |
 | `waffle.security.ssrf.allowed_hosts` | list<string> | `[]` | `[]` | `AppKernelFactory` → `SsrfGuard`. Hosts or CIDR ranges exempted from the private-address check. |
 
@@ -80,7 +81,7 @@ Read by the skeleton's `App\Factory\HttpClientFactory`; a missing key takes the 
 
 | Key | Type | Template value | Default | Read by |
 | :--- | :--- | :--- | :--- | :--- |
-| `waffle.auth.secret` | string | `%env(WAFFLE_AUTH_SECRET)%` | the `WAFFLE_AUTH_SECRET` variable | `AppKernelFactory::resolveAuthSecret()`. Shorter than 32 bytes in production: the boot is refused. |
+| `waffle.auth.secret` | string | `%env(WAFFLE_AUTH_SECRET)%` | the `WAFFLE_AUTH_SECRET` variable | `SecretFactory::auth()`. Shorter than 32 bytes in production: the boot is refused. Shared with the other services of the bridge, so never derived from `waffle.secret`. |
 | `waffle.auth.tenant` | string | `skeleton` | `null` | `AssertionCredentialsProvider` (`ten` claim of outbound assertions). |
 | `waffle.auth.jwt.issuer` | string | `https://waffle-dev.local` | same | `JwtConfig` of the demo Bearer scheme. |
 | `waffle.auth.jwt.audience` | string | `waffle-skeleton` | same | `JwtConfig`. |
