@@ -66,6 +66,7 @@ public function __construct(
     int $maxConnections = 8,                        // hard ceiling on simultaneously borrowed connections
     string $pingQuery = 'SELECT 1',                 // non-empty liveness probe run before dispensing
     ?ConnectionTrackerInterface $tracker = null,    // DIAG-03 tracer; null ⇒ no tracing, zero overhead
+    int $pingFreshnessMs = 0,                       // CARRY-01: no probe within this many ms of a proof of life
 );
 
 public function acquire(): PdoConnectionInterface;             // ping-before-dispense; reconnects transparently
@@ -79,13 +80,14 @@ public function activeCount(): int;
 ```
 
 - **Ping-before-dispense** — every idle handle is probed with `pingQuery` before it leaves the pool (`PDO::query()` then `closeCursor()`); a dropped socket is discarded and a fresh handle is created via `$factory`. The pool forces `PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION` on every connection it creates, so the probe and every query throw `PDOException` rather than failing silently.
+- **Ping freshness window** — *added in `0.1.0-beta7` (CARRY-01).* With `pingFreshnessMs` above `0`, a connection proven alive less than that many milliseconds ago — it connected, or it answered the probe — leaves without the probe; an older one is probed, and replaced if dead, as above. Only a proof counts: a handle coming back from a lease is not re-stamped, because the pool never sees the caller's errors. The cost: when the database drops its connections, a connection proven alive just before can fail leases for up to the window, until its proof is old enough for the probe to catch it. Under PostgreSQL the probe is two round trips (pdo_pgsql prepares `PDO::query()`), half of a pooled read's database work. `0`, the default, probes every dispense; the skeleton passes 500 ms. The measurement behind it: `data/benchmarks/CARRY-01-GATE-RESULT.md` in the data repository.
 - **`beginRequestScope()` / `endRequestScope()`** — pin one connection so every `acquire()` during the request returns the *same* lease (and `release()` of it is a no-op until `endRequestScope()`); idempotent within a scope. This is what makes `TransactionIsolationMiddleware`'s single transaction enclose all downstream repository writes.
 - **`reset()`** — the FrankenPHP worker hook: drops the pinned affinity, returns borrowed handles to the idle set, **rolls back any open transaction** (`inTransaction()` → `rollBack()`), and clears the per-connection prepared-statement cache. Sockets stay open so the next request reuses warm connections.
 - **`release()`** is fail-soft and idempotent: a lease minted by another pool/kind, or whose handle this pool never issued (DBAL-03), is silently ignored; re-keying on `spl_object_id()` means releasing the same handle twice is a no-op rather than a duplicate idle entry.
 - **`prepare()`** caches the compiled `PDOStatement` per `(connection, SQL)`; repeated calls return the same handle, and the cache is wiped on `reset()` so it never crosses a request boundary.
 - **Engine note:** Oracle has no table-less `SELECT`, so pass `pingQuery: 'SELECT 1 FROM DUAL'` when pooling `oci` connections (the skeleton/workspace `AppKernelFactory::buildConnectionPool()` does this automatically).
 
-A pool exhaustion (`activeCount() == maxConnections` with no idle handle), a `maxConnections` below `1`, or a failed connection/prepare raises a `Waffle\Commons\Data\Exception\DatabaseException` (`DatabaseExceptionInterface`).
+A pool exhaustion (`activeCount() == maxConnections` with no idle handle), a `maxConnections` below `1`, a negative `pingFreshnessMs`, or a failed connection/prepare raises a `Waffle\Commons\Data\Exception\DatabaseException` (`DatabaseExceptionInterface`).
 
 ## Redis pool — `Waffle\Commons\Data\Connection\RedisConnectionPool`
 

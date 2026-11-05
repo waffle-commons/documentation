@@ -18,6 +18,7 @@ public function __construct(
     int $maxConnections = 8,                        // hard ceiling on simultaneously borrowed connections
     string $pingQuery = 'SELECT 1',                 // liveness probe run before dispensing
     ?ConnectionTrackerInterface $tracker = null,    // DIAG-03 dev-only tracer; null ⇒ zero overhead
+    int $pingFreshnessMs = 0,                       // CARRY-01: no probe within this many ms of a proof of life
 );
 
 public function acquire(): PdoConnectionInterface;           // ping-before-dispense; reconnects transparently
@@ -31,6 +32,7 @@ public function activeCount(): int;
 ```
 
 - **Ping-before-dispense** — every connection is probed with `pingQuery` before it leaves the pool; a dropped socket is discarded and a fresh handle is created via `$factory`, so a stale connection never reaches the caller. The pool forces `PDO::ATTR_ERRMODE => ERRMODE_EXCEPTION` on every connection it creates.
+- **Ping freshness window** — *added in `0.1.0-beta7` (CARRY-01).* With `pingFreshnessMs` above `0`, a connection proven alive (connected, or answered the probe) less than that many milliseconds ago leaves without the probe; when the database drops its connections, such a connection can fail leases for up to the window. `0`, the default, probes every dispense. Details and trade-off in the [Connection Pool reference](connection-pool.md).
 - **`reset()`** is the FrankenPHP worker hook: borrowed handles return to the idle set, any open transaction is rolled back (a request that crashed mid-transaction must not leak a lock into the next), and the per-connection statement cache is cleared. Sockets stay open so the next request reuses warm connections.
 - Internal maps are keyed by `spl_object_id()`, so a connection is tracked by identity and can never be double-pooled.
 - **Engine note:** Oracle has no table-less `SELECT`, so pass `pingQuery: 'SELECT 1 FROM DUAL'` when pooling `oci` connections (the workspace `AppKernelFactory` does this automatically).
@@ -348,26 +350,141 @@ Either layer failing yields a `Waffle\Commons\Contracts\Exception\Validation\Val
 
 ## Migration runner — `Waffle\Commons\Data\Migration\MigrationRunner`
 
-`final` implementation of `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
+`final` implementation of `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`. *`rollback()`, `status()`, the down scripts, the per-dialect ledger and the `$dialect` argument were added in `0.1.0-beta7` (OPS-03).*
 
 ```php
-public function __construct(RelationalConnectionPoolInterface $pool, ConfigInterface $config);
-
 /**
- * @param (Closure(string): void)|null $onApplied  per-version progress callback
- * @return list<string>                             versions applied this run ([] when up to date)
- * @throws DatabaseExceptionInterface
+ * @param SQLDialect|null $dialect The ledger dialect; null reads it from the
+ *        leased connection's PDO driver name.
  */
+public function __construct(
+    private readonly RelationalConnectionPoolInterface $pool,
+    private readonly ConfigInterface $config,
+    private readonly ?SQLDialect $dialect = null,
+) {}
+
+/** @return list<string> versions applied during this call ([] when up to date) */
 public function run(?Closure $onApplied = null): array;
+
+/** @return list<string> versions reverted during this call, highest first ([] when nothing is applied) */
+public function rollback(int $steps = 1, ?Closure $onReverted = null): array;
+
+/** @return list<MigrationState> every version on disk or in the log, in version order */
+public function status(): array;
 ```
 
-- Borrows one connection from the pool, provisions `waffle_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)` if absent, then applies every `*.sql` file under the configured directory (`waffle.database.migrations_path`) **in lexicographic version order** whose version (the filename without `.sql`) is not yet recorded.
-- Each migration runs in **its own transaction**: on failure the transaction is rolled back, the run aborts, and a `DatabaseException` carrying the offending version is thrown. Already-applied migrations are skipped, so a re-run is a no-op.
+The three methods throw `DatabaseExceptionInterface` when the log cannot be read or a script fails; `rollback()` throws `\InvalidArgumentException` when `$steps` is below 1.
+
+- **Versions.** A version `V` is the file `V.sql` under the configured directory (`waffle.database.migrations_path`, default `migrations`); `V.down.sql`, when present, is its down script and is never applied as a version of its own. Versions are applied **in lexicographic order** and reverted in the reverse order.
+- **`run()`** borrows one connection from the pool, provisions the ledger if absent, then applies every version not yet recorded. Each script runs in **its own transaction** together with its ledger insert: on failure the transaction is rolled back, the run aborts, and a `DatabaseException` carrying the offending version is thrown. Already-applied versions are skipped, so a re-run is a no-op.
+- **`rollback($steps)`** targets the `$steps` most recent recorded versions and reads every target's down script **before reverting any**: a version without a down script, with an empty one, or whose script is gone from disk stops the call with nothing reverted. Each down script then runs in its own transaction together with the ledger delete.
+- **`status()`** reports each version as a `MigrationState`. It never runs a migration script.
+- **Statement-less scripts are refused.** A script holding only `--` / `/* */` comments, blank lines or semicolons throws `Migration file "…" holds no SQL statement, only comments or blank lines: write it or delete it.` before its transaction opens. PostgreSQL and SQLite would otherwise run it as a no-op and log the version.
 - Discovery and execution happen only on the explicit CLI path — never during an HTTP request (zero-magic registry).
 
-**Engine caveat:** per-migration transactions are fully atomic on engines with transactional DDL (SQLite, PostgreSQL). On MySQL, DDL (`CREATE`/`ALTER TABLE`) triggers an implicit commit, so a failed DDL step cannot be rolled back — keep one schema change per migration file on MySQL.
+The value object and its enum live in `waffle-commons/contracts`:
 
-Surfaced to operators as `bin/waffle db:migrate` (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
+```php
+namespace Waffle\Commons\Contracts\Data\Migration;
+
+final readonly class MigrationState
+{
+    /**
+     * @param string|null $appliedAt The ledger's `applied_at` value as the driver returns it (its text
+     *        format differs between engines); null while the version is pending.
+     */
+    public function __construct(
+        public string $version,
+        public MigrationStatus $status,
+        public bool $reversible,
+        public ?string $appliedAt = null,
+    ) {}
+}
+
+enum MigrationStatus: string // namespace Waffle\Commons\Contracts\Data\Migration\Enum
+{
+    case Applied = 'applied'; // recorded in the ledger, script on disk
+    case Pending = 'pending'; // on disk, not yet recorded: the next run applies it
+    case Missing = 'missing'; // recorded, but its script is no longer on disk
+}
+```
+
+`final readonly class` with promoted `public` properties makes the state immutable once built; the backed enum gives `db:status` its printable value (`$state->status->value`).
+
+**The ledger — `Waffle\Commons\Data\Migration\MigrationLedger`.** `final readonly class` holding the `waffle_migrations` SQL (`public const string TABLE = 'waffle_migrations';`) for one dialect: `CREATE TABLE IF NOT EXISTS … (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)` by default (PostgreSQL, MySQL/MariaDB, SQLite, unknown drivers), an `OBJECT_ID` guard with `NVARCHAR(255)` and `DATETIME2 … DEFAULT SYSUTCDATETIME()` on SQL Server (its `TIMESTAMP` is a row-version), and a PL/SQL block that ignores only ORA-00955 ("name is already used") on Oracle. `MigrationLedger::dialectOf(PDO $connection): ?SQLDialect` maps the PDO driver name: `mysql` → MySQL (MariaDB included), `pgsql`, `sqlite`, `sqlsrv`/`dblib` → SQL Server, `oci` → Oracle, anything else → `null`.
+
+**Engine caveat:** per-migration transactions are fully atomic on engines with transactional DDL (SQLite, PostgreSQL, SQL Server). On MySQL, MariaDB and Oracle, DDL (`CREATE`/`ALTER TABLE`) commits implicitly, so a failed DDL step cannot be rolled back — keep one schema change per migration file there. The runner commits only while a transaction is still open, so an implicit commit is not mistaken for a failure. The round trip is tested live on PostgreSQL, SQLite, MySQL 8.4 and MariaDB 11.4; SQL Server and Oracle by SQL-generation tests.
+
+Surfaced to operators as `bin/waffle db:migrate`, `db:status` and `db:rollback`, with `make:migration` to scaffold a version (see [console.md](console.md)). For the end-to-end workflow against the workspace PostgreSQL sandbox, see [How to: Database Migrations](../how-to/database-migrations.md).
+
+## Shared state for limiters and breakers (NET-01/03)
+
+*Added in `0.1.0-beta7` (NET-01/03, RFC-024 §5.1).* The Redis implementations of the two state contracts
+of [contracts.md](contracts.md#rate-limiting-net-01), over the framework's phpredis pool
+(`RedisConnectionPoolInterface`): each call leases a connection and gives it back, and each operation is
+**one Lua script** on the Redis server, so concurrent workers never race and agree on the time (the script
+reads `TIME`, not the PHP host's clock). A PSR-16 cache could not do this: `get` then `set` is not atomic.
+The pool must hand out an ext-redis `\Redis` client; any failure surfaces as `StateStorageException`
+(`StateStorageExceptionInterface`), which the limiter and the breaker turn into their failure mode.
+
+### `Waffle\Commons\Data\RateLimit\RedisLimiterStateStorage`
+
+```php
+final readonly class RedisLimiterStateStorage implements LimiterStateStorageInterface
+{
+    public const string DEFAULT_PREFIX = 'waffle:ratelimit:';
+
+    public function __construct(
+        private RedisConnectionPoolInterface $pool,
+        private string $prefix = self::DEFAULT_PREFIX,
+    ) {}
+}
+```
+
+A bucket is a hash (`tokens`, `ts`) under `prefix . key` that expires once it would be full again. A bucket
+seen for the first time starts full.
+
+### `Waffle\Commons\Data\CircuitBreaker\RedisCircuitStateStorage`
+
+```php
+final readonly class RedisCircuitStateStorage implements CircuitStateStorageInterface
+{
+    public const string DEFAULT_PREFIX = 'waffle:circuit:';
+
+    public function __construct(
+        private RedisConnectionPoolInterface $pool,
+        private string $prefix = self::DEFAULT_PREFIX,
+    ) {}
+}
+```
+
+A circuit is a hash under `prefix . circuit` (`waffle:circuit:https://api.example.com:443`): `state`,
+`opened_at`, `trials` and `trial_at` (half-open admissions), and the failure window (`window_start`,
+`calls`, `failures`). It expires once nothing can depend on it any more. A half-open trial that records no
+outcome within a cool-down gives its slot back, so a worker that died mid-call never holds the circuit
+half-open.
+
+## Readiness probe — `Waffle\Commons\Data\Health\ConnectionPoolHealthCheck`
+
+*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: it leases one connection, asks it
+`isAlive()` and gives it back. A lease inside the pool's ping freshness window (CARRY-01) skips its probe, so
+the check asks the connection itself; it never opens a connection of its own, costs one or two round trips,
+and serves the relational pool and the Redis pool alike.
+
+```php
+final readonly class ConnectionPoolHealthCheck implements HealthCheckInterface
+{
+    public function __construct(
+        private ConnectionPoolInterface $pool,
+        private string $name = 'db.pool',
+        private bool $critical = true,
+    ) {}
+}
+```
+
+A pool that cannot lease, or a connection that fails or throws on `isAlive()`, reports down, with the
+reason in the private report. See
+[pipeline.md](pipeline.md#orchestrator-probes-ops-0102).
 
 ## Warmup — `Waffle\Commons\Data\Warmup\QueryWarmer`
 

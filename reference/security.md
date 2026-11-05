@@ -10,20 +10,30 @@ Hierarchical Attribute-Based Access Control (ABAC) for the Waffle Framework, plu
 ErrorHandler → TrustedHost → Cors → AnonymousSession → Authentication → Routing → Csrf → Security → SecureHeaders → Dispatcher
 ```
 
-`CorsMiddleware` runs early (before routing) so a pre-flight is answered before the router's OPTIONS short-circuit. `AnonymousSessionMiddleware` issues a per-browser `WAFFLE_SID` cookie (32 random bytes, base64url, 30-day Max-Age, HttpOnly, SameSite=Lax, Secure on HTTPS) and **rotates** it on authentication (SEC-01 session fixation). The SID is the per-browser handle the CSRF HMAC binds to while anonymous; once authenticated the HMAC binds to the user's subject instead.
+Since `0.1.0-beta7`, `RateLimitMiddleware` sits right after `Authentication` when it is mounted
+([Rate limiting](#rate-limiting-net-01)). `CorsMiddleware` runs early (before routing) so a pre-flight is answered before the router's OPTIONS short-circuit. `AnonymousSessionMiddleware` issues a per-browser `WAFFLE_SID` cookie (32 random bytes, base64url, 30-day Max-Age, HttpOnly, SameSite=Lax, Secure on HTTPS) and **rotates** it on authentication (SEC-01 session fixation). The SID is the per-browser handle the CSRF HMAC binds to while anonymous; once authenticated the HMAC binds to the user's subject instead.
 
 ## Required configuration
 
 ```yaml
 # config/app.yaml
 waffle:
+  # Root secret (32+ bytes). The skeleton derives the CSRF key from it when
+  # security.csrf.secret is empty (HKDF-SHA256, SecretFactory::csrf()).
+  secret: '%env(APP_SECRET)%'
   security:
     level: 5
     csrf:
-      # 32+ byte signing secret. Resolved from env WAFFLE_CSRF_SECRET when set
-      # to '%env(...)%'. In prod a missing/short value aborts boot.
+      # Optional 32+ byte signing key, resolved from env WAFFLE_CSRF_SECRET. In
+      # prod, a short value, or neither it nor a valid APP_SECRET, aborts boot.
       secret: '%env(WAFFLE_CSRF_SECRET)%'
 ```
+
+`CsrfTokenManager` takes the key as given (32 bytes or more, or `InvalidArgumentException`); where the key comes
+from is the application's choice. Since `0.1.0-beta7`, the skeleton and the workspace resolve it in
+`SecretFactory::csrf()`: `WAFFLE_CSRF_SECRET` when it is set, otherwise
+`hash_hkdf('sha256', APP_SECRET, 32, 'waffle-commons/csrf/v1')`, so every worker, and every replica that shares
+`APP_SECRET`, signs with the same key.
 
 ## `Security` — exact signature
 
@@ -136,6 +146,83 @@ new CorsMiddleware(
 - **Disallowed cross-origin actual request** → `403` *before* the handler runs (a forged cross-site write never executes).
 - **Allowed response** → decorated with `Access-Control-Allow-Origin` (the exact origin, never a blanket `*` for credentialed policies) + `Vary: Origin`.
 - `CorsPolicy` throws if a wildcard `*` origin is combined with `allowCredentials` (Fetch-standard rule).
+
+## Rate limiting (NET-01)
+
+*Added in `0.1.0-beta7` (NET-01, RFC-017 §3.1).* A token bucket per key, in shared storage, enforced at the
+edge. Mount the middleware **after** `AuthenticationMiddleware` (so it counts per subject) and after the
+probes and `/waffle-metrics` (so they are never throttled): `… → Authentication → RateLimit → Routing → …`.
+Guide: [How to: Rate-Limit Requests](../how-to/rate-limit-requests.md).
+
+### `Waffle\Commons\Security\Middleware\RateLimitMiddleware`
+
+```php
+final readonly class RateLimitMiddleware implements MiddlewareInterface
+{
+    public function __construct(
+        private RateLimiterInterface $limiter,
+        private ClientIpResolverInterface $clientIp,
+        private SecurityContextInterface $securityContext,
+        private ResponseFactoryInterface $responseFactory,
+    ) {}
+
+    /** @throws \InvalidArgumentException From the PSR-17 factory on an invalid status code. */
+    #[\Override]
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface;
+}
+```
+
+- **Key:** `sub:<subject>` when the `SecurityContext` holds an identity, `ip:<address>` from the
+  `ClientIpResolverInterface` otherwise, `anonymous` when the request carries no address.
+- **Allowed:** the handler runs, and an enforced decision adds `RateLimit-Limit`, `RateLimit-Remaining` and
+  `RateLimit-Reset`.
+- **Empty bucket:** `429`, `Content-Type: application/problem+json`, `Retry-After`, body
+  `{"title":"Too Many Requests","status":429}` — the handler never runs.
+- **Storage outage under `StorageFailureMode::Closed`:** `503`, body
+  `{"title":"Service Unavailable","status":503}`. Under `Open` the handler runs and no `RateLimit-*` header
+  is sent (the counts are unknown).
+
+### `Waffle\Commons\Security\RateLimit\RateLimiter`
+
+```php
+final readonly class RateLimiter implements RateLimiterInterface
+{
+    public const string STORAGE_ERRORS_METRIC = 'waffle_ratelimit_storage_errors_total';
+
+    public function __construct(
+        private LimiterStateStorageInterface $storage,
+        private TokenBucket $bucket,
+        private StorageFailureMode $onStorageFailure = StorageFailureMode::Open,
+        private LoggerInterface $logger = new NullLogger(),
+        private ?MetricsRegistryInterface $metrics = null,
+    ) {}
+
+    /** @throws InvalidArgumentException When the key is empty or the cost does not fit the bucket. */
+    #[\Override]
+    public function consume(string $key, int $cost = 1): RateLimitDecision;
+}
+```
+
+One bucket, one storage, one failure mode; its state lives in the storage, never in worker memory. A
+`StateStorageExceptionInterface` from the storage never escapes: the limiter logs a warning, increments
+`waffle_ratelimit_storage_errors_total{mode}` (labelled by mode only — a key would be unbounded cardinality),
+and returns the failure mode's decision — allowed with `enforced: false` under `Open`, denied with `enforced: false` and
+`retryAfterSeconds: 1` under `Closed`.
+
+### `Waffle\Commons\Security\RateLimit\StorageFailureMode`
+
+```php
+enum StorageFailureMode: string
+{
+    case Open = 'open';
+    case Closed = 'closed';
+}
+```
+
+`Open` protects capacity without letting a Redis outage take the API down; `Closed` is for limiters that are
+a brute-force defence (authentication endpoints). The shared storage is
+`Waffle\Commons\Data\RateLimit\RedisLimiterStateStorage` ([data.md](data.md#shared-state-for-limiters-and-breakers-net-0103));
+the contracts are in [contracts.md](contracts.md#rate-limiting-net-01).
 
 ## `SecureContainer`
 

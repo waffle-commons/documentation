@@ -70,7 +70,10 @@ final readonly class ErrorHandlerMiddleware implements MiddlewareInterface
 Behaviour:
 
 1. Calls `$handler->handle($request)`.
-2. On `Throwable`, logs at `critical` — with the exception class, full trace, file/line, and request method + URI in the context (OBS-02: the trace is logged only, never serialised into the client response) — and returns `$renderer->render($e, $request)`.
+2. On `Throwable`, renders the error with `$renderer->render($e, $request)` first, then logs it at a severity that follows the rendered status, and returns the rendered response:
+   - **5xx** — `critical`, with the exception class, status, full trace, file/line, and request method + URI in the context (OBS-02: the trace is logged only, never serialised into the client response).
+   - **4xx** — `notice`, with the same context minus the trace. A client error is an expected event; logging it at `critical` with a trace would let any client grow the log at will.
+   - **Renderer failure** — if the renderer itself throws, the original exception is still logged at `critical` (status `500`) before the rendering failure propagates.
 3. Returns the downstream response untouched on success.
 
 The middleware is **prepended** to the stack so it wraps everything. See the [pipeline reference](pipeline.md) for the canonical Beta-1 ordering.

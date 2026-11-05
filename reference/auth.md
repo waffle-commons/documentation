@@ -72,6 +72,7 @@ Universal Authentication Bridge — RFC-021. Contracts live in
 | `Oauth\Transaction\OauthTransaction` | `start(string $returnTo = '/'): self` — high-entropy `state`/`nonce`/verifier. |
 | `Oauth\Transaction\OauthTransactionCodec` | Signed short-TTL cookie codec — `encode()`, `decode()` (403 on tamper/expiry). |
 | `Client\AuthenticatedClient` | PSR-18 decorator — `__construct(ClientInterface $inner, list<CredentialsProviderInterface> $providers)`. |
+| `Client\AuthenticatedSettlingClient` | The same decorator over a settling client — `__construct(ClientInterface&SettlingClientInterface $inner, list<CredentialsProviderInterface> $providers)`. Every request of a batch gets its credentials, and `sendRequests()`, `settleRequests()` and `promise()` reach the inner client as one batch or promise. Put it under the resilience decorators so credentials are applied again on every attempt. |
 | `Credential\AssertionCredentialsProvider` | `__construct(AssertionSignerInterface $signer, SecurityContextInterface $context, list<string> $allowedHosts, ?string $tenant = null)` — no identity/IP ⇒ no header. |
 | `Credential\BearerCredentialsProvider` / `ApiKeyCredentialsProvider` / `BasicCredentialsProvider` | Static credentials, host-gated, never overwrite. |
 | `Credential\ClientCredentialsProvider` | `__construct(OauthClientInterface $oauth, CacheInterface $cache, list<string> $allowedHosts, ?string $scope = null, string $cacheKey = 'waffle.auth.client_credentials')` — token cached until 30 s before expiry. |

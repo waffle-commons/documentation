@@ -13,9 +13,17 @@ A resident worker needs the middle ground: a small set of connections kept **war
 
 ## Heal-on-lease: a dead socket never reaches the caller
 
-The pool keeps an *idle set* of established handles. When a caller borrows one (`acquire()`), the pool runs a lightweight liveness probe **before** dispensing it — a `SELECT 1` for relational connections (`PdoConnectionPool::isAlive()`), a `PING` health-check closure for Redis. A handle that fails the probe is silently discarded and a fresh one is created via the injected factory; the caller only ever receives a connection that answered a moment ago. This is "ping-before-dispense" / "heal-on-lease": severed sockets self-heal transparently, so the classic "MySQL server has gone away after idle" failure simply cannot surface.
+The pool keeps an *idle set* of established handles. When a caller borrows one (`acquire()`), the pool runs a lightweight liveness probe **before** dispensing it — a `SELECT 1` for relational connections, a `PING` health-check closure for Redis. A handle that fails the probe is silently discarded and a fresh one is created via the injected factory; the caller only ever receives a connection that answered a moment ago. This is "ping-before-dispense" / "heal-on-lease": severed sockets self-heal transparently, so the classic "MySQL server has gone away after idle" failure simply cannot surface.
 
-The probe cost is one trivial round-trip per borrow, which is why the pool is bounded and the handles are reused — the alternative (reconnect-on-every-request) pays a full handshake instead.
+The probe cost is a trivial query per borrow — one round trip for Redis, two under PostgreSQL, where pdo_pgsql runs `PDO::query()` as a prepared statement — which is still far cheaper than the alternative (reconnect-on-every-request), which pays a full handshake.
+
+### The freshness window: probe only an old proof
+
+*Added in `0.1.0-beta7` (CARRY-01).* Under load the probe is not trivial any more: on a pooled read it is half of the database work, and the beta6 benchmark traced Waffle's early saturation knee to it. `PDOConnectionPool`'s `pingFreshnessMs` skips the probe for a connection proven alive less than that many milliseconds ago, so a busy worker probes a connection about once per window instead of once per request.
+
+What counts as a proof matters more than the window. A connection that just connected, or just answered the probe, is proven alive. A connection coming back from a lease is not: the request may have failed on it because the database had dropped it, and the pool never sees the caller's errors. Pools that skip validation for recently *used* connections (PgBouncer's `server_check_delay`, HikariCP's `aliveBypassWindowMs`) can do so because they see those errors and evict broken connections; this pool cannot, so a dead connection would keep itself "fresh" forever. Stamping only proofs bounds the damage instead: when the database drops its connections, a connection proven alive just before fails leases until its proof is older than the window, then the probe catches it and the pool reconnects.
+
+That bound is the trade-off you choose with the window, which is why the library default stays `0` (probe every dispense) and the skeleton opts in with 500 ms, HikariCP's default bypass window. The readiness probe does not rely on the lease's probe any more: `ConnectionPoolHealthCheck` asks the leased connection `isAlive()` itself, so `/readyz` never reports a database it cannot reach. On the beta7 bench, 500 ms halved Engine A's database transactions per read and moved its `dbread` knee from 1200 to at least 1500 rps (one laptop, a relative measurement: `data/benchmarks/CARRY-01-GATE-RESULT.md` in the data repository).
 
 ## Bounded by construction
 

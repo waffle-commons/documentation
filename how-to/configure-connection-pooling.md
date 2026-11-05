@@ -93,7 +93,7 @@ Repositories follow the same pattern internally — `SQLRepository` borrows, use
 
 ## 5. (Optional) Tune the pool size
 
-`maxConnections` is the hard ceiling on simultaneously borrowed connections (default `8`). It is a constructor parameter — not currently a `waffle.database.*` key — so to change it, construct the pool yourself instead of calling `buildConnectionPool()`:
+`maxConnections` is the hard ceiling on simultaneously borrowed connections (default `8`). The skeleton reads it from `waffle.database.pool_size` (`DB_POOL_SIZE`); when you construct the pool yourself instead of calling `buildConnectionPool()`, pass it directly:
 
 ```php
 use Waffle\Commons\Data\Connection\PDOConnectionPool;
@@ -105,12 +105,26 @@ $pool = new PDOConnectionPool(
     ]),
     maxConnections: 16,
     pingQuery: 'SELECT 1',           // 'SELECT 1 FROM DUAL' on Oracle
+    pingFreshnessMs: 500,            // see section 6
 );
 ```
 
 When all `maxConnections` are in use and no idle handle is available, the next `acquire()` raises a `DatabaseException` ("Connection pool exhausted") rather than opening an unbounded number of sockets — keep `maxConnections` at or below your database's per-worker connection budget.
 
-## 6. (Optional) Pool Redis the same way
+## 6. (Optional) Tune the ping freshness window
+
+*Added in `0.1.0-beta7` (CARRY-01).* The pool probes a connection before dispensing it, unless the connection was proven alive (connected, or answered the probe) less than `pingFreshnessMs` milliseconds ago. Under load this removes nearly every probe — two round trips per lease under PostgreSQL.
+
+The skeleton sets the window from `waffle.database.ping_freshness_ms`, read from `DB_PING_FRESHNESS_MS`:
+
+```dotenv
+# .env — 500 is the skeleton's default; 0 probes every lease
+DB_PING_FRESHNESS_MS=500
+```
+
+Choose it for the failure you accept: when the database drops its connections (a restart, a failover, an idle timeout on the server side), a connection proven alive just before can fail requests for up to the window, then the probe catches it and the pool reconnects. Set `0` if no request may fail that way; keep the window short (hundreds of milliseconds) if you set one. `/readyz` is not affected either way: its probe asks the leased connection itself.
+
+## 7. (Optional) Pool Redis the same way
 
 The Redis pool (`RedisConnectionPool`) is the key-value counterpart. Because the data component never hard-depends on `ext-redis`, you inject the client factory, the `PING` health-check, and an optional reset hook (`DISCARD`/`UNWATCH`) as closures:
 
@@ -137,7 +151,7 @@ $redisPool = new RedisConnectionPool(
 
 ## How it works
 
-- The pool keeps a bounded *idle set* of established handles and probes each one (`SELECT 1` / `PING`) before dispensing — a dead socket is discarded and replaced, so a stale connection never reaches your code.
+- The pool keeps a bounded *idle set* of established handles and probes each one (`SELECT 1` / `PING`) before dispensing — a dead socket is discarded and replaced, so a stale connection never reaches your code. Inside the ping freshness window (section 6) a recently proven connection skips the probe.
 - Between worker iterations the kernel calls `reset()`: borrowed handles return to idle, any open transaction is rolled back, the prepared-statement cache is cleared, and request-scoped affinity is dropped — so nothing leaks into the next request and `wfl igor` stays 0 KO.
 - The `TransactionIsolationMiddleware` adds the safety net for writes: pin one connection, one transaction, commit on success, rollback + rethrow on failure.
 

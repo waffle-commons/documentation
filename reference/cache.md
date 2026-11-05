@@ -37,6 +37,12 @@ Backend identifiers — exact constants from `Waffle\Commons\Contracts\Cache\Con
 
 Unknown identifier → `\InvalidArgumentException`. Backend construction failure → `Waffle\Commons\Cache\Exception\CacheBackendUnavailableException`.
 
+```php
+public const float REDIS_TIMEOUT = 1.0;
+```
+
+On its own, Predis waits 5 s to connect and PHP's `default_socket_timeout` (60 s) to read, so the cache's `/readyz` check could outlast the readiness probe. `CacheFactory` sets both to `REDIS_TIMEOUT` seconds; a DSN that sets its own (`?timeout=…&read_write_timeout=…`) keeps them (*since `0.1.0-beta7`*, RFC-023 §3.2).
+
 ## Connection tracing (DIAG-03)
 
 `CacheFactory` accepts an optional dev-only `?Waffle\Commons\Contracts\Data\Connection\ConnectionTrackerInterface`; when present it is threaded into `RedisCache`, which registers its client (`ConnectionKind::Redis`) so the runtime's orphaned-connection tracer can report a Redis socket still open at request end. In production the tracker is `null` and the hook is a zero-cost no-op. See [runtime.md → Orphaned-connection tracer](runtime.md#orphaned-connection-tracer--connectiontracker-diag-03).
@@ -55,6 +61,31 @@ All inherit from `Waffle\Commons\Cache\Exception\CacheException` and implement `
 
 - `CacheBackendUnavailableException` — implements `CacheBackendUnavailableExceptionInterface`. Raised when an adapter's backing store cannot be reached.
 - `InvalidCacheKeyException` — implements `InvalidCacheKeyExceptionInterface` + PSR-16's `Psr\SimpleCache\InvalidArgumentException`. Raised by `KeyValidator`.
+
+## Readiness probe — `Waffle\Commons\Cache\Health\CacheHealthCheck`
+
+*Added in `0.1.0-beta7` (OPS-01).* A `HealthCheckInterface` for `/readyz`: one `has()` on a fixed key
+(`PROBE_KEY = 'waffle.health.probe'`) — a single read round trip, never a write. A Redis-backed cache that
+cannot reach Redis throws, and the probe reports it down.
+
+```php
+final readonly class CacheHealthCheck implements HealthCheckInterface
+{
+    public const string PROBE_KEY = 'waffle.health.probe';
+
+    public function __construct(
+        private CacheInterface $cache,
+        private string $name = 'cache',
+        private bool $critical = false,
+    ) {}
+}
+```
+
+Not critical by default: an application that cannot serve without its cache says so (pass
+`critical: true`, or list `cache` under `waffle.health.required`). The skeleton registers it only when
+`waffle.cache.adapter` is `redis` — an in-memory cache would always answer "up". Give it the raw cache, not
+the `MeteredCache` decorator, or every probe skews the hit ratio. See
+[pipeline.md](pipeline.md#orchestrator-probes-ops-0102).
 
 ## Quick example
 

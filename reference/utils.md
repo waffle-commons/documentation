@@ -1,6 +1,6 @@
 # Utils Reference (`waffle-commons/utils`)
 
-> **Release:** `0.1.0-beta6` &nbsp;|&nbsp; New: SSRF predicates (`isPublicIp`/`ipInCidr`) & path-traversal guards (`safePath`/`within`)
+> **Release:** `0.1.0-beta7` &nbsp;|&nbsp; New: the DTO shape reader (`DtoShapeReader`) & a PSR-20 clock (`SystemClock`)
 
 Pure-function helper services used across the ecosystem. No I/O. No state across calls. The package is the ecosystem's lightweight standard library — small enough that every consumer can require it without bloat.
 
@@ -13,6 +13,8 @@ Pure-function helper services used across the ecosystem. No I/O. No state across
 | `Waffle\Commons\Utils\Service\ReflectionInspector` | Helper for parameter / return-type / promoted-property inspection. |
 | `Waffle\Commons\Utils\Assert` | Static entry point for input validation **and** cleansing — drops straight into PHP 8.5 property-hook setters. |
 | `Waffle\Commons\Utils\Validation\AssertValidator` | Injectable `ValidatorInterface` (DX-05) wrapping the static `Assert` facade: runs a `SelfValidatingInterface` object's `assertValid()` and converts the first thrown violation into a `ValidationResult` (with `Violation` entries). Mockable in tests. |
+| `Waffle\Commons\Utils\Dto\Shape\DtoShapeReader` | Reads the shape of a `#[Dto]` class at build time — the keys it accepts and emits — for the serializer and the OpenAPI generator (*since `0.1.0-beta7`*). See [below](#dtoshapereader--the-shape-of-a-dto). |
+| `Waffle\Commons\Utils\Clock\SystemClock` | PSR-20 `ClockInterface` on the system time, in a fixed time zone (*since `0.1.0-beta7`*). See [below](#systemclock--psr-20-clock). |
 
 The three `Service\*` classes are `final readonly`. None of them touch superglobals or filesystem state beyond what's passed to them explicitly. `Assert` has its own section below.
 
@@ -148,9 +150,183 @@ Every assertion throws `Waffle\Commons\Utils\Exception\ValidationException`, whi
 
 `Assert` and its four traits declare **no properties of any kind** — no instances, no `static` caches. Nothing survives a request, so it is safe under FrankenPHP resident-worker mode. This is enforced two ways: a reflection/determinism PHPUnit test, and a static `igor-php` audit (`composer igor`) that fails on any worker-unsafe state.
 
+## `DtoShapeReader` — the shape of a `#[Dto]`
+
+*Since `0.1.0-beta7` (RFC-016, CARRY-04).* `Waffle\Commons\Utils\Dto\Shape\DtoShapeReader` (`utils/src/Dto/Shape/DtoShapeReader.php`) reads a `#[Dto]` class at build time: the keys it accepts (its constructor parameters) and the keys it emits (its readable properties). The serializer's normalizer compiler ([serializer.md](serializer.md)) and the OpenAPI schema builder ([openapi.md](openapi.md)) both read DTOs through it, so the generated document describes exactly what the serializer accepts and emits.
+
+```php
+final readonly class DtoShapeReader
+{
+    /** @param class-string $class  @throws UnsupportedDtoShapeException */
+    public function read(string $class): DtoShape;
+
+    /**
+     * Reads the given DTOs and every `#[Dto]` they reach, directly or through a
+     * list, on either side. A cycle is followed once.
+     *
+     * @param class-string ...$roots
+     * @return array<class-string, DtoShape> Keyed by class name, in discovery order.
+     * @throws UnsupportedDtoShapeException
+     */
+    public function readGraph(string ...$roots): array;
+}
+```
+
+- **Inputs** are the constructor parameters, in declaration order. A payload is hydrated through the constructor with named arguments, so the `set` hooks and the constructor body always run; nothing writes a property directly.
+- **Outputs** are the readable properties: public, non-static, and not a virtual property with only a `set` hook. A virtual property with a `get` hook is a *computed* output. Asymmetric visibility (`public private(set)`) and `readonly` change nothing for reading.
+- The two sides are matched **by name only**, on purpose: a `password` parameter hashed into a `passwordHash` property is accepted under one name and emitted under the other.
+- A field is an `int`, a `float`, a `string`, a `bool`, a backed enum, a nested `#[Dto]` (`self` included) or an `array` whose element type `#[ListOf]` declares; any of them may be nullable (`?T`, `T|null`). A default value is `null`, a scalar, a backed enum case or `[]`. Anything else throws `UnsupportedDtoShapeException`, which names the member.
+
+The reader reflects on every call and caches nothing, so it holds no state across worker requests.
+
+### The shape value objects
+
+Each is a `final readonly` class whose fields use asymmetric visibility (`public private(set)`, PHP 8.4): readable everywhere, written only by the constructor.
+
+```php
+namespace Waffle\Commons\Utils\Dto\Shape;
+
+final readonly class DtoShape
+{
+    /**
+     * @param class-string      $class
+     * @param list<InputField>  $inputs
+     * @param list<OutputField> $outputs
+     */
+    public function __construct(
+        public private(set) string $class,
+        public private(set) array $inputs,
+        public private(set) array $outputs,
+    ) {}
+
+    public function input(string $name): ?InputField;
+    public function output(string $name): ?OutputField;
+
+    /** @return list<class-string> The #[Dto] classes referred to, directly or as list elements, each once, in first-seen order. */
+    public function dependencies(): array;
+}
+
+final readonly class InputField
+{
+    /** Whether the payload must carry the key: no default value and not nullable. */
+    public private(set) bool $required;
+
+    /** @param int|float|string|bool|BackedEnum|array{}|null $default The default value, when `$hasDefault`. */
+    public function __construct(
+        public private(set) string $name,
+        public private(set) FieldType $type,
+        public private(set) bool $hasDefault = false,
+        public private(set) int|float|string|bool|BackedEnum|array|null $default = null,
+    ) {}
+}
+
+final readonly class OutputField
+{
+    public function __construct(
+        public private(set) string $name,
+        public private(set) FieldType $type,
+        public private(set) bool $computed = false,
+    ) {}
+}
+```
+
+An absent key falls back to the parameter's default, and a nullable parameter without a default receives `null`, so only a parameter with neither is `required`. A `computed` output has no backing value: the OpenAPI schema marks it read-only.
+
+`FieldType` has a private constructor and four named constructors, so every instance is a valid combination: a scalar carries no class, a `#[Dto]` its class-string, a backed enum its class-string and backing kind, a list its element type (never nullable, never a list).
+
+```php
+final readonly class FieldType
+{
+    /** @param class-string|null $class */
+    private function __construct(
+        public private(set) TypeKind $kind,
+        public private(set) bool $nullable,
+        public private(set) ?string $class = null,
+        public private(set) ?TypeKind $backing = null,
+        public private(set) ?FieldType $item = null,
+    ) {}
+
+    /** @throws InvalidArgumentException When the kind is not a scalar kind. */
+    public static function scalar(TypeKind $kind, bool $nullable = false): self;
+
+    /** @param class-string $class */
+    public static function dto(string $class, bool $nullable = false): self;
+
+    /** @param class-string<BackedEnum> $class  @throws InvalidArgumentException When the backing kind is neither Int nor String. */
+    public static function enum(string $class, TypeKind $backing, bool $nullable = false): self;
+
+    /** @throws InvalidArgumentException When the element type is nullable or a list itself. */
+    public static function listOf(self $item, bool $nullable = false): self;
+
+    /** @return class-string|null The #[Dto] class this type refers to, directly or as a list element. */
+    public function referencedDto(): ?string;
+
+    /** The type in a PHP-like notation, for messages: `int`, `?string`, `list<App\Dto\Line>`, `?App\Status`. */
+    public function describe(): string;
+}
+```
+
+```php
+namespace Waffle\Commons\Utils\Dto\Shape\Enum;
+
+enum TypeKind: string
+{
+    case Int = 'int';
+    case Float = 'float';
+    case String = 'string';
+    case Bool = 'bool';
+    case Enum = 'enum';
+    case Dto = 'dto';
+    case List = 'list';
+
+    /** Whether the kind is one of the four JSON scalars. */
+    public function isScalar(): bool;
+}
+```
+
+### Failure: `UnsupportedDtoShapeException`
+
+```php
+namespace Waffle\Commons\Utils\Exception;
+
+final class UnsupportedDtoShapeException extends LogicException
+{
+    /**
+     * @param string $dtoClass The class being read.
+     * @param string $member   The member at fault (`constructor parameter $tags`, `property $total`), or `''` for the class itself.
+     * @param string $reason   Why it is unsupported, phrased to follow the member.
+     */
+    public function __construct(
+        public private(set) string $dtoClass,
+        public private(set) string $member,
+        string $reason,
+    ) {}
+}
+```
+
+The message reads `Cannot read the DTO shape of "App\Dto\Order": constructor parameter $tags …`. It is raised at build time, while the shape is read, and reports a mistake in the DTO, never a client error: it extends `LogicException` and maps to no HTTP status.
+
+## `SystemClock` — PSR-20 clock
+
+*Since `0.1.0-beta7` (CARRY-04).* `Waffle\Commons\Utils\Clock\SystemClock` (`utils/src/Clock/SystemClock.php`) implements PSR-20's `Psr\Clock\ClockInterface` on the system time. Code that needs the current time takes a `ClockInterface` by injection and receives this clock in production; tests swap in a frozen one ([testing.md](testing.md)).
+
+```php
+final readonly class SystemClock implements ClockInterface
+{
+    public function __construct(
+        private DateTimeZone $timezone = new DateTimeZone('UTC'),
+    ) {}
+
+    #[\Override]
+    public function now(): DateTimeImmutable;
+}
+```
+
+The time zone is fixed at construction — UTC by default, through a `new` expression in the parameter default (PHP 8.1) — instead of being read from the ambient `date.timezone` setting, so the same code yields the same instant in every environment.
+
 ## Worker-mode safety
 
-The three `Service\*` classes are `final readonly` with no constructor parameters and no instance state; `Assert` and its traits declare no properties at all and expose only `static` methods. Either way nothing survives a request — safe to share across worker requests, and in fact intended to be reused.
+The three `Service\*` classes are `final readonly` with no constructor parameters and no instance state; `Assert` and its traits declare no properties at all and expose only `static` methods. Either way nothing survives a request — safe to share across worker requests, and in fact intended to be reused. `DtoShapeReader` is `final readonly` with no state and reflects on every call; `SystemClock`'s only field is its readonly time zone, and every `now()` reads the time again.
 
 ## What's deliberately *not* here
 
@@ -165,3 +341,5 @@ The package is small on purpose. New helpers are added only when ≥2 components
 
 - [core.md](core.md) — `ControllerArgumentResolver` consumes `ReflectionInspector`.
 - [event-dispatcher.md](event-dispatcher.md) — `ClassParser` is used by `AppKernelFactory::discoverAndRegisterListeners()`.
+- [serializer.md](serializer.md) and [openapi.md](openapi.md) — both read DTOs through `DtoShapeReader`.
+- [testing.md](testing.md) — the frozen clock that replaces `SystemClock` in tests.

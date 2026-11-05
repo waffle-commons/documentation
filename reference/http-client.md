@@ -10,9 +10,9 @@ A high-performance PSR-18 HTTP client tuned for FrankenPHP resident-worker proxy
 ```php
 namespace Waffle\Commons\HttpClient;
 
-final readonly class Client implements ClientInterface, ConcurrentClientInterface
+final readonly class Client implements ClientInterface, ConcurrentClientInterface, SettlingClientInterface
 {
-    public const int CONNECT_TIMEOUT_MS = 1_000;
+    public const int CONNECT_TIMEOUT_MS = 1000;
     public const int TIMEOUT_MS         = 10_000;
     public const int CHUNK_SIZE         = 8_192;
 
@@ -24,16 +24,24 @@ final readonly class Client implements ClientInterface, ConcurrentClientInterfac
         private TextMapPropagatorInterface $propagator = new NullTextMapPropagator(),  // W3C trace context
     );
 
+    /** A copy using other timeouts (NET-02): an immutable wither, never mutable client state. */
+    public function withTimeouts(TimeoutPolicy $timeouts): self;
+
     public function sendRequest(RequestInterface $request): ResponseInterface;
 
     /** @return array<array-key, ResponseInterface> Concurrent fan-out (Beta-5 / ASYNC). */
     public function sendRequests(array $requests): array;
 
+    /** @return array<array-key, ResponseInterface|ClientExceptionInterface> Every request settled (NET-02/03). */
+    public function settleRequests(array $requests): array;
+
     public function promise(RequestInterface $request): PromiseInterface;
 }
 ```
 
-`sendRequest()` wraps every transfer in a CLIENT span and injects W3C trace context onto the outbound request (no-op with the default `NullTracer`/`NullTextMapPropagator`). The concurrent surface comes from `Waffle\Commons\Contracts\HttpClient\ConcurrentClientInterface`: `sendRequests()` drives several transfers on the shared multi handle at once, and `promise()` returns a lazy `PromiseInterface` (`state()`, `then()`, `catch()`, `wait(): ResponseInterface`).
+`sendRequest()` wraps every transfer in a CLIENT span and injects W3C trace context onto the outbound request (no-op with the default `NullTracer`/`NullTextMapPropagator`). The concurrent surface comes from `Waffle\Commons\Contracts\HttpClient\ConcurrentClientInterface`: `sendRequests()` drives several transfers on the shared multi handle at once, and `promise()` returns a lazy `PromiseInterface` (`state()`, `then()`, `catch()`, `wait(): ResponseInterface`). `settleRequests()` (`SettlingClientInterface`, *added in `0.1.0-beta7`*) runs the same concurrent batch but throws nothing: each request ends with its response or the exception its transfer failed with — what the resilience decorators below need.
+
+**Timeouts** (*`0.1.0-beta7`, NET-02*) come from a private `TimeoutPolicy`, `new TimeoutPolicy()` (1 s connect, 10 s total) unless `withTimeouts()` returns a copy with another one. `withTimeouts()` uses PHP 8.5's `clone($this, ['timeouts' => $timeouts])`, so a `readonly` client gets a modified copy without a mutable property. The `CONNECT_TIMEOUT_MS` / `TIMEOUT_MS` constants keep the former ceilings' values, but the client no longer reads them: `TimeoutPolicy::DEFAULT_CONNECT_MS` and `DEFAULT_TOTAL_MS` replace them.
 
 ## Beta-1 / SEC-03 — SSRF protocol allowlist
 
@@ -48,7 +56,7 @@ This blocks SSRF pivots via `file://`, `gopher://`, `dict://`, `ldap://`, `telne
 
 ## SEC-02 — SSRF guard (resolve → validate → pin)
 
-When a `Waffle\Commons\HttpClient\Security\SsrfGuard` is injected, every `sendRequest()` resolves the target host, asserts that **every** resolved IP is publicly routable, and pins the vetted address into the transport via `CURLOPT_RESOLVE` — *before* any socket is opened. A non-public resolution throws `SsrfException` (a PSR-18 `RequestExceptionInterface`), fail-closed.
+When a `Waffle\Commons\HttpClient\Security\SsrfGuard` is injected, every `sendRequest()` resolves the target host, asserts that **every** resolved IP is publicly routable, and pins the vetted address into the transport via `CURLOPT_RESOLVE` — *before* any socket is opened. A non-public resolution throws `SsrfException` (a PSR-18 `RequestExceptionInterface`), fail-closed. A host that does not resolve at all throws `NetworkException` with code `CURLE_COULDNT_RESOLVE_HOST`, as cURL reports it for a host it resolves itself: an outage of the name rather than a refusal, so a retry policy retries it and a circuit breaker counts it. Nothing is sent either way.
 
 ```php
 use Waffle\Commons\HttpClient\Client;
@@ -73,12 +81,12 @@ The client enforces a security baseline that callers cannot lower:
 | `CURLOPT_SSL_VERIFYPEER` | `true` | Forces certificate validation. |
 | `CURLOPT_SSL_VERIFYHOST` | `2` | Forces hostname match. |
 | `CURLOPT_FOLLOWLOCATION` | `false` | The client never silently follows redirects. |
-| `CURLOPT_CONNECTTIMEOUT_MS` | `1_000` | 1-second connect ceiling. Cannot be raised. |
-| `CURLOPT_TIMEOUT_MS` | `10_000` | 10-second total ceiling. Cannot be raised. A hung legacy backend must never lock a worker thread. |
+| `CURLOPT_CONNECTTIMEOUT_MS` | `TimeoutPolicy::$connectMs` (1 000 by default) | Connect timeout, 1 to 30 000 ms through `withTimeouts()` — never `0`, which cURL reads as "no timeout". |
+| `CURLOPT_TIMEOUT_MS` | `TimeoutPolicy::$totalMs` (10 000 by default) | Total timeout, 1 to 120 000 ms. A hung legacy backend must never lock a worker thread. |
 | `CURLOPT_NOSIGNAL` | `true` | Required for resident-worker safety. |
 | `CURLOPT_BUFFERSIZE` | `8_192` | Chunk size for response streaming via `CURLOPT_WRITEFUNCTION`. |
 | `CURLOPT_UPLOAD` + `CURLOPT_READFUNCTION` | set when a body is present | Streams the request body in `CHUNK_SIZE` chunks instead of buffering it with `CURLOPT_POSTFIELDS`. |
-| `CURLOPT_INFILESIZE` | body length, when known | Advertises `Content-Length`; omitted for unknown-length streams (→ `Transfer-Encoding: chunked`). |
+| `CURLOPT_INFILESIZE` | body length, when known | Advertises `Content-Length`. The length is the stream's size, else the request's single well-formed `Content-Length`; omitted when neither gives one (→ `Transfer-Encoding: chunked`). |
 
 `SELECT_TIMEOUT` (private, `1.0`s) bounds each `curl_multi_select()` park.
 
@@ -90,6 +98,8 @@ The client enforces a security baseline that callers cannot lower:
 
 **Request body.** When the PSR-7 request carries a body, `applyRequestBody()` enables `CURLOPT_UPLOAD` and registers a `CURLOPT_READFUNCTION` that pulls `CHUNK_SIZE` bytes at a time from the request stream — a large multipart/chunked upload is forwarded without ever buffering the whole payload (unlike `CURLOPT_POSTFIELDS`). The request method set via `CURLOPT_CUSTOMREQUEST` is preserved. Known body lengths use `CURLOPT_INFILESIZE`; unknown lengths fall back to `Transfer-Encoding: chunked`.
 
+**One framing per body** *(changed in 0.1.0-beta7)*. The body length is the stream's own size, else the request's single well-formed `Content-Length` (a stream such as `php://input` in a FrankenPHP worker cannot report its size, while the client that sent it declared one), else unknown. When the client uploads a body, libcurl writes the framing itself, so the request's own `Content-Length` and `Transfer-Encoding` headers are left out. Before this, an unsized body went out chunked next to the caller's `Content-Length` — two framings in one request, which RFC 9112 §6.1 forbids and nginx refuses with 400. A request that sends no body keeps its headers as given. A caller that forwards a received request should give it its body only when it has one: an unsized empty stream is still sent as an empty chunked body.
+
 **Response.** The header callback (`CURLOPT_HEADERFUNCTION`) parses the status line and headers as libcurl emits them. The body callback (`CURLOPT_WRITEFUNCTION`) writes each chunk directly into a PSR-7 stream (typically `php://temp`-backed). The full body never lives in PHP memory; it streams from libcurl into the stream and out to the caller.
 
 ## Exception hierarchy
@@ -97,9 +107,10 @@ The client enforces a security baseline that callers cannot lower:
 | Class | Extends | Implements (PSR-18) | Thrown when |
 | :--- | :--- | :--- | :--- |
 | `HttpClientException` | `RuntimeException` | `ClientExceptionInterface` | cURL handle could not be allocated. |
-| `NetworkException` | `HttpClientException` | `NetworkExceptionInterface` | Transport failure: DNS, connect timeout, read timeout, TLS error, peer reset, partial-file, send/recv error. |
+| `NetworkException` | `HttpClientException` | `NetworkExceptionInterface` | Transport failure: DNS (including a host the SSRF guard cannot resolve), connect timeout, read timeout, TLS error, peer reset, partial-file, send/recv error. |
 | `RequestException` | `HttpClientException` | `RequestExceptionInterface` | Protocol-level failure (malformed URL, empty response) or any non-network cURL error. |
-| `SsrfException` | `HttpClientException` | `RequestExceptionInterface` | The SSRF guard refused the target host (missing, unresolvable, or a non-public IP). |
+| `SsrfException` | `HttpClientException` | `RequestExceptionInterface` | The SSRF guard refused the target host (missing, or a non-public IP). |
+| `CircuitOpenException` | `HttpClientException` | `Contracts\CircuitBreaker\Exception\CircuitOpenExceptionInterface` | *`0.1.0-beta7`.* `CircuitBreakerClient` refused the call: the target origin's circuit is open. Code `503`, the status the error handler renders. Never retried. |
 
 The client uses libcurl errno → PSR-18 mapping in `Client::mapCurlError()`. The full list of "network" errnos: `CURLE_COULDNT_RESOLVE_PROXY`, `CURLE_COULDNT_RESOLVE_HOST`, `CURLE_COULDNT_CONNECT`, `CURLE_OPERATION_TIMEOUTED`, `CURLE_SSL_CONNECT_ERROR`, `CURLE_GOT_NOTHING`, `CURLE_SEND_ERROR`, `CURLE_RECV_ERROR`, `CURLE_PARTIAL_FILE`.
 
@@ -128,7 +139,91 @@ echo (string) $response->getBody(); // streamed body
 
 - The `\CurlHandle` and `\CurlMultiHandle` are reused across requests. `curl_reset()` clears per-request state on the easy handle without freeing it; the easy handle is added to / removed from the multi handle each call.
 - No instance state lives between `sendRequest()` calls beyond the two handles (the class is `final readonly`).
-- Driving the transfer through `curl_multi_select()` means the worker waits on the socket rather than blocking in `curl_exec()`; combined with the 10-second hardcoded ceiling, a hung remote endpoint can never lock a FrankenPHP worker.
+- Driving the transfer through `curl_multi_select()` means the worker waits on the socket rather than blocking in `curl_exec()`; combined with the `TimeoutPolicy` bound (no infinite timeout can be built), a hung remote endpoint can never lock a FrankenPHP worker.
+- The resilience decorators below are stateless too: retry counts live on the call stack, and circuit state in Redis.
+
+## Resilience (NET-02/03)
+
+*Added in `0.1.0-beta7` (NET-02/03, RFC-024).* Two decorators around any PSR-18 client, composed
+`RetryingClient(CircuitBreakerClient(client))`: every attempt asks the breaker first, and the breaker's
+refusal is never retried. Both implement `SettlingClientInterface`, so a concurrent batch stays concurrent
+through them. Guide: [How to: Make Outbound Calls Resilient](../how-to/make-outbound-calls-resilient.md).
+
+### `Waffle\Commons\HttpClient\Resilience\RetryingClient`
+
+```php
+final readonly class RetryingClient implements ClientInterface, SettlingClientInterface
+{
+    /** @param (Closure(int): void)|null $sleep Waits the given milliseconds; `usleep` when null. */
+    public function __construct(
+        private ClientInterface $inner,
+        private RetryPolicy $policy = new RetryPolicy(),
+        private ?Closure $sleep = null,
+    ) {}
+
+    /** A copy with another policy: the per-request override is an immutable wither. */
+    public function withPolicy(RetryPolicy $policy): self;
+}
+```
+
+- Retries a transport failure (`NetworkExceptionInterface`) or a `429` / `502` / `503` / `504`
+  (`RetryPolicy::RETRYABLE_STATUSES`), for `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE` only, unless the
+  policy sets `retryNonIdempotent`.
+- Exponential backoff with full jitter, capped at `maxDelayMs`; a numeric `Retry-After` may exceed the cap
+  when it fits the remaining `budgetMs`. No wait starts that would overrun the budget: the last response or
+  failure is returned then.
+- Every attempt goes through the inner client again: its SSRF guard resolves, validates and pins the host
+  anew.
+- A batch retries in waves: each request keeps its own attempts, backoff, `Retry-After` and budget, and
+  the requests to retry go out again together once the longest of their waits has passed. A promise runs
+  the retries when it is waited on.
+
+### `Waffle\Commons\HttpClient\Resilience\CircuitBreakerClient`
+
+```php
+final readonly class CircuitBreakerClient implements ClientInterface, SettlingClientInterface
+{
+    public const string TRANSITIONS_METRIC = 'waffle_circuit_transitions_total';
+    public const string STATE_METRIC = 'waffle_circuit_state';
+    public const string STORAGE_ERRORS_METRIC = 'waffle_circuit_storage_errors_total';
+
+    public function __construct(
+        private ClientInterface $inner,
+        private CircuitStateStorageInterface $storage,
+        private CircuitBreakerPolicy $policy = new CircuitBreakerPolicy(),
+        private CircuitObservers $observers = new CircuitObservers(),
+    ) {}
+}
+```
+
+- One circuit per target origin, `scheme://host:port` (`http` and the scheme's default port when the URI
+  omits them), kept in the shared `CircuitStateStorageInterface`.
+- A transport failure or a `5xx` counts as a failure; any other response as a success.
+- An open circuit throws `CircuitOpenException` (`503`) before any connection. A batch checks every
+  request's circuit before any is sent; a refused request settles as its `CircuitOpenException`.
+- When the storage is unavailable, the breaker behaves as closed: the call goes through, the observers'
+  logger gets a warning and `waffle_circuit_storage_errors_total{circuit}` is incremented (RFC-024 §5.2).
+- Reporting: `waffle_circuit_state{circuit}` (gauge: `0` closed, `1` half-open, `2` open) after every
+  decision; on a transition, `waffle_circuit_transitions_total{circuit,to}` and a PSR-14
+  `CircuitStateChanged` event.
+
+### `Waffle\Commons\HttpClient\Resilience\CircuitObservers`
+
+```php
+final readonly class CircuitObservers
+{
+    public function __construct(
+        public ?EventDispatcherInterface $events = null,
+        public ?MetricsRegistryInterface $metrics = null,
+        public LoggerInterface $logger = new NullLogger(),
+    ) {}
+}
+```
+
+Where a breaker reports: transitions as events and metrics, storage outages as a warning and a metric.
+Every observer is optional. The policies and the storage contract are in
+[contracts.md](contracts.md#outbound-resilience-net-0203); the Redis storage in
+[data.md](data.md#shared-state-for-limiters-and-breakers-net-0103).
 
 ## PHP 8.5 features used
 
@@ -136,6 +231,7 @@ echo (string) $response->getBody(); // streamed body
 - Typed integer constants for `CONNECT_TIMEOUT_MS`, `TIMEOUT_MS`, `CHUNK_SIZE`.
 - `#[\Override]` on PSR-18 implementation.
 - `match` for HTTP-version negotiation.
+- `clone($this, ['timeouts' => $timeouts])` — PHP 8.5 *clone with* — for the `withTimeouts()` and `withPolicy()` withers on `readonly` classes.
 
 ## Related
 

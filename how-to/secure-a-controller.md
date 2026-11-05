@@ -138,7 +138,7 @@ Waffle ships a fully **stateless signed double-submit** CSRF subsystem (`Waffle\
 
 Operational requirements:
 
-1. Set `waffle.security.csrf.secret` (or env `WAFFLE_CSRF_SECRET`) to a 32+ byte value. Production refuses to boot without one; non-prod falls back to an ephemeral per-process secret.
+1. Set `APP_SECRET` to a 32+ byte value: the skeleton derives the CSRF key from it (HKDF-SHA256, `SecretFactory::csrf()`), the same in every worker. To impose a key of your own, set `waffle.security.csrf.secret` (or env `WAFFLE_CSRF_SECRET`, 32+ bytes) instead. Production refuses to boot without a valid key; non-prod falls back to an ephemeral per-process secret.
 2. Place `AnonymousSessionMiddleware` **before** `CsrfMiddleware` in the pipeline — the kernel factories do this for you in the canonical order.
 
 See the [CSRF explanation page](../explanation/security-csrf-double-submit.md) for the full design rationale.

@@ -241,12 +241,58 @@ Each span is tagged `db.system` and `db.operation`; a failure records the except
 
 > **Note — native vs decorator:** the `data` component already traces its repositories *natively* via its own `QueryTracer` + a `withTracer(TracerInterface)` wither on every repository (see the [data reference](data.md)), so `TracingRepositoryDecorator` is the alternative for wrapping a repository you cannot reconfigure — both emit the same `waffle.db.query` CLIENT span.
 
+## Dev profiler headers — `Waffle\Commons\Telemetry\Middleware\ProfilerHeadersMiddleware`
+
+*Added in `0.1.0-beta7` (DXP-01, RFC-018 §3.2).* A PSR-15 middleware for **debug mode only**: the headers
+disclose internals, so the skeleton adds it only when `$debug` is true, which `AppKernelFactory` refuses in
+production (RFC-018 §4).
+
+```php
+final readonly class ProfilerHeadersMiddleware implements MiddlewareInterface
+{
+    public const string TIME_HEADER = 'X-Waffle-Time';
+    public const string MEMORY_HEADER = 'X-Waffle-Memory';
+    public const string QUERIES_HEADER = 'X-Waffle-Queries';
+    public const string SERVER_TIMING_HEADER = 'Server-Timing';
+
+    public function __construct(private ?QueryCountingTracer $queries = null) {}
+}
+
+final class QueryCountingTracer implements TracerInterface, ResettableInterface
+{
+    public const string QUERY_SPAN = 'waffle.db.query';
+
+    public function __construct(private readonly TracerInterface $tracer) {}
+    public function queryCount(): int;   // queries since the last reset(): the current request
+}
+```
+
+- `X-Waffle-Time` — the time the request took through the middlewares inside this one, in ms; the skeleton
+  places it first, so it covers the whole pipeline and error responses carry the headers too.
+  `Server-Timing: app;dur=…` repeats it for browser devtools.
+- `X-Waffle-Memory` — the worker's current memory once the request is answered, in MiB. Not the peak: the
+  peak is process-wide in a worker, and resetting it per request would corrupt the one `/waffle-metrics`
+  reports.
+- `X-Waffle-Queries` — present when the middleware gets a `QueryCountingTracer`. That tracer decorates the
+  registered `TracerInterface`, forwards every span, and counts the `waffle.db.query` spans the data layer
+  opens per query, so it counts what the traces show: queries run through a repository given this tracer
+  (`withTracer()`). Raw PDO on a pooled connection opens no span and is not counted.
+
+```console
+$ curl -si http://localhost/hello/ada | grep -iE '^(x-waffle|server-timing)'
+# illustrative values: they vary with the request and the host
+X-Waffle-Time: 3.2ms
+X-Waffle-Memory: 6.4MiB
+Server-Timing: app;dur=3.2
+X-Waffle-Queries: 0
+```
+
 ## Support — `Waffle\Commons\Telemetry\Support\Coerce`
 
 A tiny static type-coercion helper for the inherently-`mixed` returns of APCu and `json_decode()`. Each method narrows with `is_*()` (or `array_filter` with a typed predicate) so callers never assign or cast `mixed` directly — keeping the analyzer clean without suppressions: `toFloat()`, `toString()`, `toArray()`, `toStringList()`, `toStringMap()`.
 
 ## Worker-safety contract
 
-Every class in the component is `final readonly` with no accumulating field, and the only cumulative state — the metric counters — lives in APCu, outside the worker heap. The component passes the `igor-php` worker-mode audit with zero findings.
+Every class in the component is `final readonly` with no accumulating field, except `Profiler\QueryCountingTracer`, whose per-request query count is cleared by `reset()` (it implements `ResettableInterface` directly); the only cumulative state — the metric counters — lives in APCu, outside the worker heap. The component passes the `igor-php` worker-mode audit with zero findings.
 
 > *Verified for Waffle Framework 0.1.0-beta6 running on PHP 8.5.6+.*

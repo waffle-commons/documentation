@@ -208,4 +208,4 @@ When `CoreRoutingMiddleware` runs successfully, the following attributes are pre
 - `_arguments` — `array<string, mixed>` of per-argument metadata from `#[Argument]`.
 - `_path` — the original route path pattern (e.g. `/users/{id}`).
 - `_name` — the route name from `#[Route(name: ...)]`.
-- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the path.
+- `_params` — `array<string, mixed>` of `{placeholder}` values extracted from the path. Named by `Constant::ATTR_PARAMS` (added in 0.1.0-beta7).

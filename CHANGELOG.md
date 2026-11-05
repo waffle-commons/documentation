@@ -10,6 +10,103 @@ Released in lockstep with the Waffle Commons umbrella tag.
 > Entries begin at `0.1.0-beta6`, when this changelog was introduced; earlier tags
 > (`0.1.0-alpha5` → `0.1.0-beta5`) exist but were not accompanied by release notes here.
 
+## [0.1.0-beta7] — 2026-11
+
+**Theme: the production surface (NET, OPS, DXP-01, the four new components and the carry-overs) documented as it landed.**
+
+### Added
+- `reference/utils.md` documents the two beta7 additions to utils, its stamp moving to Beta-7: `DtoShapeReader`
+  (`read()`, `readGraph()`, what counts as an input or an output, the supported field types and defaults), the
+  shape value objects (`DtoShape`, `InputField`, `OutputField`, `FieldType` and its named constructors, `TypeKind`)
+  and `UnsupportedDtoShapeException`, then the PSR-20 `SystemClock`, every signature checked against the source.
+  `reference/queue.md` adds `MailerExceptionInterface` (the `@throws` of `MailerInterface::send()`) and
+  `reference/cache.md` the `CacheFactory::REDIS_TIMEOUT` constant.
+- The four new components each get a reference page and a how-to guide, every signature checked against the source:
+  `reference/queue.md` (the queue and mailer contracts, the Redis Streams driver, its keys, the `queue:work` options,
+  retries and exit codes) with `how-to/run-background-jobs.md`; `reference/serializer.md` (`DtoSerializerInterface`,
+  `#[ListOf]`, the compiled and interpreted normalizers, `serializer:compile`, `ContentNegotiationMiddleware`, the
+  errors and their statuses) with `how-to/serialize-dtos.md`; `reference/openapi.md` (`openapi:generate`, what each
+  route and DTO becomes, the `#[OA\*]` attributes, the debug-only `/_docs`) with
+  `how-to/generate-an-openapi-document.md`; `reference/testing.md` (`WaffleTestCase`, `KernelClient`, `TestResponse`,
+  the doubles and the exceptions) with `how-to/test-through-the-kernel.md`. `reference/index.md` lists them (its
+  title moves to Beta-7) and the README links the guides.
+- `reference/telemetry.md` documents the dev profiler headers (DXP-01): `ProfilerHeadersMiddleware`, `QueryCountingTracer`,
+  what each header measures and what `X-Waffle-Queries` cannot see; its worker-safety note names the one resettable class.
+- The pool's ping freshness window (CARRY-01): `reference/connection-pool.md` and `reference/data.md` document
+  `PDOConnectionPool`'s `pingFreshnessMs` and its trade-off, `explanation/connection-pooling.md` explains why only
+  a proof of life (a connection or an answered probe) opens the window, `how-to/configure-connection-pooling.md`
+  gains section 6 (`DB_PING_FRESHNESS_MS`), and `how-to/configuration.md` and `reference/configuration-keys.md`
+  list `waffle.database.ping_freshness_ms`. `reference/data.md` says `ConnectionPoolHealthCheck` now asks the
+  leased connection `isAlive()`.
+- Three how-to guides: `how-to/rate-limit-requests.md` (NET-01), `how-to/make-outbound-calls-resilient.md`
+  (NET-02/03) and `how-to/run-on-kubernetes.md` (probes, draining, migrations as a Job — OPS-01/02/03).
+- `reference/configuration-keys.md`: every `waffle.*` key the skeleton declares, with its type, template
+  value, default and reader. It flags `waffle.debug`, `waffle.log.channel` and `waffle.log.stream` as
+  declared but read by nothing, and the `waffle.paths.event_listeners` default as pointing at a directory
+  the skeleton does not have.
+- Reference sections for the NET/OPS surface: `contracts.md` (rate limiting, outbound resilience, health
+  checks, `ClientIpResolverInterface`), `security.md` (`RateLimitMiddleware`, `RateLimiter`,
+  `StorageFailureMode`), `http.md` (`TrustedProxyClientIpResolver`), `pipeline.md` (`ProbeMiddleware`,
+  `ReadinessProbe`), `data.md` (the Redis state storages, `ConnectionPoolHealthCheck`) and `cache.md`
+  (`CacheHealthCheck`); a Beta-7 section in `reference/index.md`.
+
+### Changed
+- `APP_SECRET` is the application's root secret, and the CSRF key derives from it unless `WAFFLE_CSRF_SECRET` is
+  set (HKDF-SHA256, context `waffle-commons/csrf/v1`, in the skeleton's and the workspace's `SecretFactory`).
+  `reference/configuration-keys.md` gains the `waffle.secret` row, and its CSRF and auth rows name their new reader;
+  `reference/security.md`, `how-to/secure-a-controller.md`, `how-to/run-on-kubernetes.md` (the same `APP_SECRET`
+  on every replica) and `explanation/security-csrf-double-submit.md` (why a shared root, and how to rotate) say
+  which secrets production needs; `reference/wfl.md` says that `wfl csrf-init` signs with the derived key too.
+- The router no longer needs Redis to boot: `reference/configuration-keys.md` and `reference/aot.md` say that an
+  unreachable cache backend is a miss at `Router::boot()`, so a worker that starts during a Redis outage discovers
+  its routes and serves `/healthz` while `/readyz` reports the cache down. The page said the opposite.
+- `tutorials/quick-start.md` and `tutorials/first-secured-crud-endpoint.md` name the version in their
+  `composer create-project` command (`waffle-commons/skeleton:0.1.0-beta6`, the release they were written for):
+  without one, Composer looks for a stable release and finds none, since every Waffle release is a beta.
+- `explanation/performance.md`: *Measured numbers* now gives the Beta-7 series (FrankenPHP 1.13.2, four engines,
+  Engine D doing Waffle's per-request work in Symfony): JSON at parity, database-backed requests 0.3–0.4 ms slower
+  than Symfony doing the same work, php-fpm's memory growing 12.5× faster per concurrent request (crossover near
+  14, 2.81× at 128), the two-hour soaks. The pool result stays as a Beta-6 measurement without its throughput
+  figure, and the unmeasured "sub-millisecond" claims are gone.
+- `how-to/run-on-kubernetes.md`: the readiness probe sets `timeoutSeconds: 3`, longer than each check's own
+  timeout (RFC-023 §3.2): a database connection gives up after `waffle.database.connect_timeout` (2 s), a Redis
+  read on the skeleton's phpredis pools after 1 s. `reference/configuration-keys.md` lists the new
+  `waffle.database.connect_timeout` key (`DB_CONNECT_TIMEOUT`).
+- `reference/http-client.md` documents the body framing fixed in http-client: the length comes from the stream,
+  else from the request's single well-formed `Content-Length`, and the caller's `Content-Length` and
+  `Transfer-Encoding` are left out whenever libcurl frames an upload. It also tells forwarding callers to give a
+  received request its body only when it has one (found by the EcoShield gateway, GATE-02).
+- `how-to/configure-connection-pooling.md` no longer says `maxConnections` has no `waffle.database.*` key: the
+  skeleton has read `waffle.database.pool_size` (`DB_POOL_SIZE`) since beta6. `explanation/connection-pooling.md`
+  gives the probe's real cost, two round trips under PostgreSQL, and drops a method name the pool never exposed.
+- Findings fixed the same day: `reference/configuration-keys.md` drops `waffle.debug`, `waffle.log.channel` and
+  `waffle.log.stream` (removed from the skeleton) and shows `waffle.paths.event_listeners` resolved under
+  `APP_ROOT`; `security.md` and the rate-limit how-to show the `waffle_ratelimit_storage_errors_total` metric.
+- `reference/http-client.md`: `Client` implements `SettlingClientInterface` and takes its timeouts from a
+  `TimeoutPolicy` (`withTimeouts()`): they are no longer hardcoded ceilings. New *Resilience* section
+  (`RetryingClient`, `CircuitBreakerClient`, `CircuitObservers`) and `CircuitOpenException` in the exception
+  table.
+- `reference/http-client.md`: a host the SSRF guard cannot resolve is a `NetworkException` (cURL code 6), no longer an `SsrfException`.
+- `reference/auth.md`: `Client\AuthenticatedSettlingClient`, the outbound credentials decorator that keeps a batch concurrent.
+- `how-to/database-migrations.md`: migrations run from the skeleton's production image, which now ships `bin/` and `migrations/`.
+- `how-to/database-migrations.md` covers the whole migration cycle — `make:migration`, `db:migrate`, `db:status`,
+  `db:rollback` — with each command's exit codes, and the transactional-DDL caveat now names MariaDB, Oracle and
+  SQL Server too (OPS-03).
+- `reference/console.md`, `reference/data.md` and `reference/contracts.md` document the migration commands,
+  `MigrationRunner::rollback()` and `status()`, `MigrationLedger`, `MigrationState` and `MigrationStatus` (OPS-03).
+- `reference/contracts.md` shows `KernelInterface::$container` (CARRY-04).
+- `reference/contracts.md`, `routing.md` and `pipeline.md` name `Constant::ATTR_PARAMS` for the `_params`
+  attribute. `reference/core.md` now says `ControllerDispatcher` reads `_classname`, `_method` and `_params`: it
+  said `_controller` and `_route_params`, which the code never read (CARRY-06).
+- `reference/container.md` documents `Container::memoise()`. `reference/aot.md` shows the compiled container
+  building its inlined services through it: every path now shares one instance, `reset()` only delegates, and
+  the Beta-6 "one instance per memo" constraint is gone. Its worker-safety paragraph no longer calls the memo
+  per-request: it lives as long as the worker (CARRY-06).
+- `reference/configuration-keys.md` no longer says the workspace reads the limiter's and the breaker's Redis
+  from `waffle.queue.redis_dsn`: it reads their own `redis_dsn` keys, like the skeleton.
+- `README.md` describes `0.1.0-beta7`: the four new components, NET, OPS and DXP-01, and what is not
+  documented yet (the new components, beta8 `[DOC-01]`).
+
 ## [0.1.0-beta6] — 2026-09
 
 **Theme: the documentation is made to describe the code that actually exists (AXE 3).**

@@ -1,6 +1,6 @@
-# Waffle Components Reference (Beta-6)
+# Waffle Components Reference (Beta-7)
 
-Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the `0.1.0-beta6` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` — plus `waffle-commons/utils` where declared, and any explicit additions in its own `composer.json` — a perimeter enforced by `mago guard` (see [Architecture](../explanation/architecture.md)).
+Below is the complete index of components shipped in the `waffle-commons` ecosystem as of the `0.1.0-beta7` release. Every component is an autonomous Git repository depending only on `waffle-commons/contracts` — plus `waffle-commons/utils` where declared, and any explicit additions in its own `composer.json` — a perimeter enforced by `mago guard` (see [Architecture](../explanation/architecture.md)).
 
 | Component | Package | Description | Reference |
 | :--- | :--- | :--- | :--- |
@@ -28,6 +28,10 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 | **Console** | `waffle-commons/console` | Zero-magic CLI runtime: `cache:clear`, `route:list`, `security:audit`, `security:compare-audit`, `db:migrate`, `igor:audit`, `data:warmup`, the AOT `container:compile` / `route:compile` pair, and the nine `make:*` scaffolding makers (RFC-020). | [console.md](console.md) |
 | **Config** | `waffle-commons/config` | Native YAML (ext-yaml) configuration loader with strict typing. | [config.md](config.md) |
 | **Error Handler** | `waffle-commons/error-handler` | RFC 7807 JSON error renderer and PSR-15 middleware. | [error-handler.md](error-handler.md) |
+| **Queue** | `waffle-commons/queue` | Background jobs (QUEUE-01/02/03): a Redis Streams queue with bounded retries and a dead-letter store; the `queue:work` worker ships in `console`; mail is a contract only. | [queue.md](queue.md) |
+| **OpenAPI** | `waffle-commons/openapi` | OpenAPI 3.1 generated at build time from `#[Route]` and typed DTOs (API-01): `openapi:generate`, the `#[Operation]` / `#[Response]` / `#[Property]` attributes, a debug-only Swagger UI at `/_docs`. | [openapi.md](openapi.md) |
+| **Serializer** | `waffle-commons/serializer` | `#[Dto]` ↔ JSON at the HTTP boundary (API-02): normalizers compiled by `serializer:compile` for `WAFFLE_AOT=1`, an interpreted fallback, `Accept` negotiation. | [serializer.md](serializer.md) |
+| **Testing** | `waffle-commons/testing` | Dev-only kernel testing bridge (TEST-01): `WaffleTestCase` sends requests through the real pipeline in-process; doubles for the clock, the queue, the mailer, the HTTP client and the limiter store. | [testing.md](testing.md) |
 | **Utils** | `waffle-commons/utils` | Pure-function helpers shared across components (no I/O): `Assert` (validation & cleansing), `ClassParser`, `AttributeReader`, `ReflectionInspector`. | [utils.md](utils.md) |
 
 ## Developer tooling
@@ -42,6 +46,45 @@ Below is the complete index of components shipped in the `waffle-commons` ecosys
 Beta-3 introduces the **`waffle-commons/data`** component (RFC-022) — a worker-safe, ORM-free persistence layer — and the contracts that support it: `Waffle\Commons\Contracts\Data\Connection\ConnectionPoolInterface`, `Waffle\Commons\Contracts\Data\Exception\DatabaseExceptionInterface`, and `Waffle\Commons\Contracts\Data\Migration\MigrationRunnerInterface`.
 
 The Beta-3 cycle then completes the RFC-022 surface. In **contracts**: the SQR vocabulary (`Contracts\Data\Enum\{Operator, Direction}` — ⚠️ relocated from `Waffle\Commons\Data\Query` — plus the `QueryInterface` / `ComparisonInterface` / `OrderInterface` property-interfaces), the stateless `Contracts\Data\Repository\RepositoryInterface` (`find` / `findOne` / `stream`), and the CRUD write surface (`WritableRepositoryInterface`: `save` / `delete` / `findById`, through pure `DataMapperInterface` mappers). In **data**: all six relational dialects plus the MongoDB / key-value / Cassandra (CQL) / GraphQL compilers, seven typed repositories, live drivers, and the atomic flat-file JSON store — full type listing in [data.md](data.md), design rationale (ports-and-adapters drivers, the CQL transport situation, the workspace sandbox) in [Explanation: The Universal Data & Persistence Layer](../explanation/data-persistence.md). In **console**: `db:migrate` (concrete `MigrationRunner` wired by the app's `bin/waffle` — contracts-only edge, see [How to: Database Migrations](../how-to/database-migrations.md)), `data:warmup`, and the `make:entity` / `make:repository` makers (RFC-020) — see [console.md](console.md) and the [data CHANGELOG](../../data/CHANGELOG.md).
+
+## Beta-7 additions — the production surface
+
+Beta-7 (`0.1.0-beta7`) adds the production surface:
+
+- **Background jobs (QUEUE-01/02/03).** Contracts `Queue\{MessageInterface, Envelope, QueueDispatcherInterface,
+  QueueConsumerInterface, MessageHandlerInterface, FailedMessageStoreInterface, FailedMessage}` and
+  `Mailer\{MailerInterface, Email}`; the new `queue` component (Redis Streams driver, dead-letter store, envelope
+  codec, `/readyz` probe) and `console`'s `queue:work`. See [queue.md](queue.md) and
+  [How to: Run Background Jobs](../how-to/run-background-jobs.md).
+- **API description (API-01).** Contracts `OpenApi\Attribute\{Operation, Response, Property}`; the new `openapi`
+  component (`openapi:generate`, `ApiDocsMiddleware`). See [openapi.md](openapi.md) and
+  [How to: Generate an OpenAPI Document](../how-to/generate-an-openapi-document.md).
+- **Serialization (API-02).** Contracts `Serializer\DtoSerializerInterface` and `Attribute\ListOf`; the new
+  `serializer` component (compiled normalizers, `serializer:compile`, `ContentNegotiationMiddleware`). See
+  [serializer.md](serializer.md) and [How to: Serialize DTOs](../how-to/serialize-dtos.md).
+- **Testing (TEST-01).** The new dev-only `testing` component: `WaffleTestCase`, `KernelClient` and the test
+  doubles. See [testing.md](testing.md) and [How to: Test Through the Kernel](../how-to/test-through-the-kernel.md).
+
+- **Rate limiting (NET-01).** Contracts `RateLimit\{RateLimiterInterface, LimiterStateStorageInterface,
+  TokenBucket, RateLimitDecision}` and `Http\ClientIpResolverInterface`; `security`'s
+  `RateLimitMiddleware` and `RateLimiter`; `http`'s `TrustedProxyClientIpResolver`; `data`'s
+  `RedisLimiterStateStorage`. See [contracts.md](contracts.md#rate-limiting-net-01),
+  [security.md](security.md#rate-limiting-net-01) and
+  [How to: Rate-Limit Requests](../how-to/rate-limit-requests.md).
+- **Outbound resilience (NET-02/03).** Contracts `HttpClient\{TimeoutPolicy, RetryPolicy,
+  SettlingClientInterface}` and the `CircuitBreaker\*` family; `http-client`'s `Client::withTimeouts()`,
+  `RetryingClient` and `CircuitBreakerClient`; `data`'s `RedisCircuitStateStorage`. See
+  [http-client.md](http-client.md#resilience-net-0203) and
+  [How to: Make Outbound Calls Resilient](../how-to/make-outbound-calls-resilient.md).
+- **Probes and graceful shutdown (OPS-01/02).** Contracts `Health\{HealthCheckInterface, HealthResult}`;
+  `pipeline`'s `ProbeMiddleware` and `ReadinessProbe`; the `data`, `cache` and `queue` probes. See
+  [pipeline.md](pipeline.md#orchestrator-probes-ops-0102) and
+  [How to: Run on Kubernetes](../how-to/run-on-kubernetes.md).
+- **Configuration keys.** Every `waffle.*` key the skeleton declares, with its reader:
+  [configuration-keys.md](configuration-keys.md).
+
+The migration lifecycle (OPS-03) is in [How to: Run Database Migrations](../how-to/database-migrations.md).
+Beta8's documentation pass (`[DOC-01]`) re-verifies these pages against the frozen contracts.
 
 ## Beta-6 additions
 
